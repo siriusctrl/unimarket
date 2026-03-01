@@ -112,7 +112,8 @@ paper-trade/
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `POST` | `/api/orders` | key | Place an order (requires `reasoning`) |
-| `GET` | `/api/orders` | key | List orders |
+| `GET` | `/api/orders` | key | List orders (`view=open|history|all`) |
+| `GET` | `/api/orders/:id` | key | Get a single order by id |
 | `POST` | `/api/orders/reconcile` | key/admin | Reconcile pending limit orders (requires `reasoning`) |
 | `DELETE` | `/api/orders/:id` | key | Cancel an order (requires `reasoning`) |
 

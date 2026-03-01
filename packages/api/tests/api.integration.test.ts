@@ -174,6 +174,7 @@ describe("api integration", () => {
     const openApi = await openApiResponse.json();
     expect(openApi.openapi).toBe("3.1.0");
     expect(openApi.paths["/api/orders/reconcile"]).toBeDefined();
+    expect(openApi.paths["/api/orders/{id}"]?.get).toBeDefined();
     expect(openApi.paths["/api/admin/overview"]).toBeDefined();
 
     const unauthorizedOrders = await app.request("/api/orders");
@@ -233,6 +234,10 @@ describe("api integration", () => {
     const invalidOrdersQuery = await authedJson("/api/orders?limit=999", user.apiKey);
     expect(invalidOrdersQuery.status).toBe(400);
     expect((await invalidOrdersQuery.json()).error.code).toBe("INVALID_INPUT");
+
+    const invalidOrdersViewQuery = await authedJson("/api/orders?view=unsupported", user.apiKey);
+    expect(invalidOrdersViewQuery.status).toBe(400);
+    expect((await invalidOrdersViewQuery.json()).error.code).toBe("INVALID_INPUT");
 
     const invalidPositionsQuery = await authedJson("/api/positions?userId=", user.apiKey);
     expect(invalidPositionsQuery.status).toBe(400);
@@ -551,6 +556,14 @@ describe("api integration", () => {
     const pendingOrder = await pendingOrderResponse.json();
     expect(pendingOrder.status).toBe("pending");
 
+    const orderByIdResponse = await authedJson(`/api/orders/${pendingOrder.id as string}`, user.apiKey);
+    expect(orderByIdResponse.status).toBe(200);
+    expect((await orderByIdResponse.json()).status).toBe("pending");
+
+    const openOrdersResponse = await authedJson("/api/orders?view=open", user.apiKey);
+    expect(openOrdersResponse.status).toBe(200);
+    expect((await openOrdersResponse.json()).orders).toHaveLength(1);
+
     const listOrdersResponse = await authedJson(
       `/api/orders?status=pending&market=polymarket&symbol=0x-pending`,
       user.apiKey,
@@ -574,6 +587,18 @@ describe("api integration", () => {
     });
     expect(cancelResponse.status).toBe(200);
     expect((await cancelResponse.json()).status).toBe("cancelled");
+
+    const cancelledOrderById = await authedJson(`/api/orders/${pendingOrder.id as string}`, user.apiKey);
+    expect(cancelledOrderById.status).toBe(200);
+    expect((await cancelledOrderById.json()).status).toBe("cancelled");
+
+    const openAfterCancel = await authedJson("/api/orders?view=open", user.apiKey);
+    expect(openAfterCancel.status).toBe(200);
+    expect((await openAfterCancel.json()).orders).toHaveLength(0);
+
+    const historyAfterCancel = await authedJson("/api/orders?view=history", user.apiKey);
+    expect(historyAfterCancel.status).toBe(200);
+    expect((await historyAfterCancel.json()).orders).toHaveLength(1);
 
     const cancelAgainResponse = await authedJson(`/api/orders/${pendingOrder.id as string}`, user.apiKey, {
       method: "DELETE",
@@ -634,6 +659,10 @@ describe("api integration", () => {
     expect(pendingResponse.status).toBe(201);
     const pendingPayload = await pendingResponse.json();
 
+    const adminGetOrder = await authedJson(`/api/orders/${pendingPayload.id as string}`, "admin_test_key");
+    expect(adminGetOrder.status).toBe(200);
+    expect((await adminGetOrder.json()).id).toBe(pendingPayload.id);
+
     const outsiderCancelResponse = await authedJson(`/api/orders/${pendingPayload.id as string}`, outsider.apiKey, {
       method: "DELETE",
       headers: { "content-type": "application/json" },
@@ -641,6 +670,10 @@ describe("api integration", () => {
     });
     expect(outsiderCancelResponse.status).toBe(404);
     expect((await outsiderCancelResponse.json()).error.code).toBe("ORDER_NOT_FOUND");
+
+    const outsiderGetOrder = await authedJson(`/api/orders/${pendingPayload.id as string}`, outsider.apiKey);
+    expect(outsiderGetOrder.status).toBe(404);
+    expect((await outsiderGetOrder.json()).error.code).toBe("ORDER_NOT_FOUND");
 
     const missingOrderCancel = await authedJson("/api/orders/ord_missing", owner.apiKey, {
       method: "DELETE",

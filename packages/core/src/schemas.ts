@@ -9,6 +9,7 @@ export const reasoningSchema = z.string().trim().min(1, "reasoning is required")
 export const sideSchema = z.enum(["buy", "sell"]);
 export const orderTypeSchema = z.enum(["market", "limit"]);
 export const orderStatusSchema = z.enum(["pending", "filled", "cancelled", "rejected"]);
+export const ordersViewSchema = z.enum(["all", "open", "history"]);
 
 export const placeOrderSchema = z
   .object({
@@ -65,6 +66,7 @@ export const paginationQuerySchema = z.object({
 });
 
 export const listOrdersQuerySchema = z.object({
+  view: ordersViewSchema.default("all"),
   status: orderStatusSchema.optional(),
   market: marketIdSchema.optional(),
   symbol: symbolSchema.optional(),
@@ -99,3 +101,4 @@ export type SearchMarketQuery = z.infer<typeof searchMarketQuerySchema>;
 export type QuoteQuery = z.infer<typeof quoteQuerySchema>;
 export type AdminAmountInput = z.infer<typeof adminAmountSchema>;
 export type OrderStatus = z.infer<typeof orderStatusSchema>;
+export type OrdersView = z.infer<typeof ordersViewSchema>;

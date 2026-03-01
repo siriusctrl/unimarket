@@ -51,13 +51,22 @@ describe("schemas", () => {
     const pagination = paginationQuerySchema.parse({});
     expect(pagination).toEqual({ limit: 20, offset: 0 });
 
+    const defaultOrders = listOrdersQuerySchema.parse({});
+    expect(defaultOrders).toMatchObject({
+      view: "all",
+      limit: 20,
+      offset: 0,
+    });
+
     const listOrders = listOrdersQuerySchema.parse({
+      view: "open",
       status: "pending",
       limit: "10",
       offset: "2",
     });
 
     expect(listOrders).toMatchObject({
+      view: "open",
       status: "pending",
       limit: 10,
       offset: 2,

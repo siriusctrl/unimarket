@@ -221,7 +221,15 @@ const createOpenApiDocument = (registry: MarketRegistry) => {
           summary: "Place order (reasoning required)",
         },
         get: {
-          summary: "List orders",
+          summary: "List orders (view=open|history|all)",
+          parameters: [
+            { name: "view", in: "query", required: false, schema: { type: "string", enum: ["all", "open", "history"] } },
+            { name: "status", in: "query", required: false, schema: { type: "string" } },
+            { name: "market", in: "query", required: false, schema: { type: "string", enum: marketIds } },
+            { name: "symbol", in: "query", required: false, schema: { type: "string" } },
+            { name: "limit", in: "query", required: false, schema: { type: "integer" } },
+            { name: "offset", in: "query", required: false, schema: { type: "integer" } },
+          ],
         },
       },
       "/api/orders/reconcile": {
@@ -230,6 +238,10 @@ const createOpenApiDocument = (registry: MarketRegistry) => {
         },
       },
       "/api/orders/{id}": {
+        get: {
+          summary: "Get order by id",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        },
         delete: {
           summary: "Cancel pending order (reasoning required)",
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
@@ -755,6 +767,13 @@ export const createApp = (options: CreateAppOptions = {}): App => {
         }
         predicates.push(eq(orders.accountId, account.id));
       }
+
+      if (parsed.data.view === "open") {
+        predicates.push(eq(orders.status, "pending"));
+      } else if (parsed.data.view === "history") {
+        predicates.push(inArray(orders.status, ["filled", "cancelled", "rejected"]));
+      }
+
       if (parsed.data.status) {
         predicates.push(eq(orders.status, parsed.data.status));
       }
@@ -777,6 +796,28 @@ export const createApp = (options: CreateAppOptions = {}): App => {
         .all();
 
       return c.json({ orders: rows });
+    }),
+  );
+
+  app.get(
+    "/api/orders/:id",
+    withErrorHandling(async (c) => {
+      const orderId = c.req.param("id");
+      const userId = c.get("userId");
+
+      const order = await getFirst(db.select().from(orders).where(eq(orders.id, orderId)).limit(1).all());
+      if (!order) {
+        return jsonError(c, 404, "ORDER_NOT_FOUND", "Order not found");
+      }
+
+      if (userId !== "admin") {
+        const account = await getUserAccount(userId);
+        if (!account || account.id !== order.accountId) {
+          return jsonError(c, 404, "ORDER_NOT_FOUND", "Order not found");
+        }
+      }
+
+      return c.json(order);
     }),
   );
 
