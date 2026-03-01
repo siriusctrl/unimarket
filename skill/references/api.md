@@ -4,34 +4,109 @@ Base URL: `http://<host>:3100/api`
 
 Auto-generated OpenAPI 3.1 spec available at `/openapi.json`.
 
-## Accounts
-
-### Create Account
+All endpoints except `/api/auth/register` and `/health` require:
 ```
-POST /accounts
+Authorization: Bearer <api_key>
+```
+
+## Auth
+
+### Register
+```
+POST /api/auth/register
 Content-Type: application/json
 
 { "name": "my-agent" }
 
 → 201
 {
+  "userId": "usr_xxxx",
+  "apiKey": "pt_live_xxxxxxxxxxxx",
+  "account": {
+    "id": "acc_xxxx",
+    "balance": 100000,
+    "createdAt": "2026-03-01T00:00:00Z"
+  }
+}
+```
+
+The API key is only shown once at creation time. Store it securely.
+
+### Generate New Key
+```
+POST /api/auth/keys
+
+→ 201
+{
+  "id": "key_xxxx",
+  "apiKey": "pt_live_yyyyyyyyyyyy",
+  "prefix": "pt_live_yy****"
+}
+```
+
+### Revoke Key
+```
+DELETE /api/auth/keys/:id
+
+→ 200
+{ "revoked": true }
+```
+
+## Accounts
+
+### Create Account
+```
+POST /api/accounts
+Content-Type: application/json
+
+{ "name": "strategy-alpha" }
+
+→ 201
+{
   "id": "acc_xxxx",
-  "name": "my-agent",
+  "name": "strategy-alpha",
   "balance": 100000,
   "createdAt": "2026-03-01T00:00:00Z"
 }
 ```
 
+One user can have multiple accounts (e.g. one per strategy).
+
 ### Get Account
 ```
-GET /accounts/:id
+GET /api/accounts/:id
 
 → 200
 {
   "id": "acc_xxxx",
-  "name": "my-agent",
+  "name": "strategy-alpha",
   "balance": 97500.50,
   "createdAt": "2026-03-01T00:00:00Z"
+}
+```
+
+### Get Portfolio
+```
+GET /api/accounts/:id/portfolio
+
+→ 200
+{
+  "accountId": "acc_xxxx",
+  "balance": 97500.50,
+  "positions": [
+    {
+      "market": "polymarket",
+      "symbol": "0x1234...abcd",
+      "symbolName": "Will Trump win 2028?",
+      "quantity": 100,
+      "avgCost": 0.42,
+      "currentPrice": 0.48,
+      "unrealizedPnl": 6.00,
+      "marketValue": 48.00
+    }
+  ],
+  "totalValue": 97548.50,
+  "totalPnl": -2451.50
 }
 ```
 
@@ -39,38 +114,38 @@ GET /accounts/:id
 
 ### Place Order
 ```
-POST /orders
+POST /api/orders
 Content-Type: application/json
 
 {
   "accountId": "acc_xxxx",
-  "market": "us-stock",
-  "symbol": "AAPL",
+  "market": "polymarket",
+  "symbol": "0x1234...abcd",
   "side": "buy",
   "type": "market",
-  "quantity": 10
+  "quantity": 100
 }
 
 → 201
 {
   "id": "ord_xxxx",
   "accountId": "acc_xxxx",
-  "market": "us-stock",
-  "symbol": "AAPL",
+  "market": "polymarket",
+  "symbol": "0x1234...abcd",
   "side": "buy",
   "type": "market",
-  "quantity": 10,
+  "quantity": 100,
   "status": "filled",
-  "filledPrice": 245.32,
+  "filledPrice": 0.42,
   "filledAt": "2026-03-01T00:00:01Z"
 }
 ```
 
-For limit orders, add `"limitPrice": 240.00`. Status will be `"pending"` until filled or cancelled.
+For limit orders, add `"limitPrice": 0.40`. Status will be `"pending"` until filled or cancelled.
 
 ### List Orders
 ```
-GET /orders?accountId=acc_xxxx&status=filled&market=us-stock
+GET /api/orders?accountId=acc_xxxx&status=filled&market=polymarket
 
 → 200
 { "orders": [...] }
@@ -80,7 +155,7 @@ Query params (all optional): `accountId`, `status` (pending|filled|cancelled), `
 
 ### Cancel Order
 ```
-DELETE /orders/:id
+DELETE /api/orders/:id
 
 → 200
 { "id": "ord_xxxx", "status": "cancelled" }
@@ -88,35 +163,11 @@ DELETE /orders/:id
 
 Only pending orders can be cancelled.
 
-## Portfolio
-
-### Get Portfolio
-```
-GET /accounts/:id/portfolio
-
-→ 200
-{
-  "accountId": "acc_xxxx",
-  "balance": 97500.50,
-  "positions": [
-    {
-      "market": "us-stock",
-      "symbol": "AAPL",
-      "quantity": 10,
-      "avgCost": 245.32,
-      "currentPrice": 248.10,
-      "unrealizedPnl": 27.80,
-      "marketValue": 2481.00
-    }
-  ],
-  "totalValue": 99981.50,
-  "totalPnl": -18.50
-}
-```
+## Positions
 
 ### List Positions
 ```
-GET /positions?accountId=acc_xxxx
+GET /api/positions?accountId=acc_xxxx
 
 → 200
 { "positions": [...] }
@@ -124,37 +175,30 @@ GET /positions?accountId=acc_xxxx
 
 ## Market Data
 
+All market data endpoints use query params.
+
 ### List Markets
 ```
-GET /markets
+GET /api/markets
 
 → 200
 {
   "markets": [
-    { "id": "us-stock", "name": "US Stocks", "status": "open" },
-    { "id": "polymarket", "name": "Polymarket", "status": "open" }
+    {
+      "id": "polymarket",
+      "name": "Polymarket",
+      "description": "Prediction markets — contracts resolve to $0 or $1",
+      "symbolFormat": "Condition ID (hex string)",
+      "priceRange": [0.01, 0.99],
+      "capabilities": ["search", "quote", "orderbook", "resolve"]
+    }
   ]
-}
-```
-
-### Get Quote
-```
-GET /markets/us-stock/quote/AAPL
-
-→ 200
-{
-  "symbol": "AAPL",
-  "price": 248.10,
-  "bid": 248.05,
-  "ask": 248.15,
-  "volume": 52340000,
-  "timestamp": "2026-03-01T00:00:00Z"
 }
 ```
 
 ### Search Assets
 ```
-GET /markets/polymarket/search?q=trump+election
+GET /api/markets/polymarket/search?q=trump+election
 
 → 200
 {
@@ -169,13 +213,50 @@ GET /markets/polymarket/search?q=trump+election
 }
 ```
 
+### Get Quote
+```
+GET /api/markets/polymarket/quote?symbol=0x1234...abcd
+
+→ 200
+{
+  "symbol": "0x1234...abcd",
+  "price": 0.42,
+  "bid": 0.41,
+  "ask": 0.43,
+  "volume": 1500000,
+  "timestamp": "2026-03-01T00:00:00Z"
+}
+```
+
+### Get Orderbook
+```
+GET /api/markets/polymarket/orderbook?symbol=0x1234...abcd
+
+→ 200
+{
+  "bids": [{ "price": 0.41, "size": 5000 }, ...],
+  "asks": [{ "price": 0.43, "size": 3000 }, ...]
+}
+```
+
+### Check Resolution
+```
+GET /api/markets/polymarket/resolve?symbol=0x1234...abcd
+
+→ 200
+{ "symbol": "0x1234...abcd", "resolved": false, "outcome": null }
+
+// or when resolved:
+{ "symbol": "0x1234...abcd", "resolved": true, "outcome": "yes", "settlementPrice": 1.00 }
+```
+
 ## Admin Endpoints
 
-Require admin API key in `Authorization: Bearer <admin-key>` header.
+Require admin key in `Authorization: Bearer <admin_key>` header.
 
 ### Deposit
 ```
-POST /admin/accounts/:id/deposit
+POST /api/admin/accounts/:id/deposit
 Content-Type: application/json
 
 { "amount": 50000 }
@@ -186,7 +267,7 @@ Content-Type: application/json
 
 ### Withdraw
 ```
-POST /admin/accounts/:id/withdraw
+POST /api/admin/accounts/:id/withdraw
 Content-Type: application/json
 
 { "amount": 10000 }
@@ -200,5 +281,5 @@ Content-Type: application/json
 GET /health
 
 → 200
-{ "status": "ok", "markets": { "us-stock": "open", "polymarket": "open" } }
+{ "status": "ok", "markets": { "polymarket": "open" } }
 ```
