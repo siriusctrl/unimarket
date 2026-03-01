@@ -190,8 +190,8 @@ interface MarketAdapter {
 ## Getting Started
 
 ```bash
-git clone https://github.com/siriusctrl/paper-trade.git
-cd paper-trade
+git clone https://github.com/siriusctrl/unimarket.git
+cd unimarket
 pnpm install
 pnpm dev       # starts on :3100
 pnpm test
@@ -200,13 +200,15 @@ pnpm test
 ## Roadmap
 
 - [x] Project setup + architecture
-- [ ] Core trading engine (accounts, orders, positions, P&L)
-- [ ] Auth (register, API keys)
-- [ ] Polymarket adapter
-- [ ] Journal + timeline
-- [ ] REST API with OpenAPI spec
+- [x] Core trading engine (accounts, orders, positions, P&L)
+- [x] Auth (register, API keys)
+- [x] Polymarket adapter
+- [x] Journal + timeline
+- [x] REST API with OpenAPI spec
+- [x] Limit order improvements (immediate fill when marketable)
+- [x] Pending order reconcile endpoint
 - [ ] Web dashboard
-- [ ] Agent integration skill
+- [x] Agent integration skill
 - [ ] US stock market adapter
 - [ ] More markets (Kalshi, crypto)
 - [ ] Historical trade replay / backtesting
