@@ -1,0 +1,22 @@
+{
+  "name": "@paper-trade/api",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@paper-trade/core": "workspace:*",
+    "@paper-trade/markets": "workspace:*",
+    "@hono/node-server": "^1.14.2",
+    "@libsql/client": "^0.15.2",
+    "drizzle-orm": "^0.41.0",
+    "hono": "^4.7.3",
+    "zod": "^3.24.2"
+  }
+}
