@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { MarketRegistry, type MarketAdapter } from "@paper-trade/markets";
 
 type AppLike = {
   request: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -18,7 +19,41 @@ let app: AppLike;
 beforeAll(async () => {
   const [{ createApp }, { migrate }] = await Promise.all([import("../src/app.js"), import("../src/db/client.js")]);
   await migrate();
-  app = createApp();
+
+  const mockAdapter: MarketAdapter = {
+    marketId: "polymarket",
+    displayName: "Polymarket",
+    description: "mock polymarket adapter",
+    symbolFormat: "mock",
+    priceRange: [0.01, 0.99],
+    capabilities: ["search", "quote", "orderbook", "resolve"],
+    search: async () => [],
+    getQuote: async (symbol) => {
+      if (symbol === "0x-cross-symbol") {
+        return { symbol, price: 0.35, bid: 0.34, ask: 0.35, timestamp: new Date().toISOString() };
+      }
+
+      return { symbol, price: 0.6, bid: 0.59, ask: 0.6, timestamp: new Date().toISOString() };
+    },
+    getOrderbook: async (symbol) => ({
+      symbol,
+      bids: [{ price: 0.34, size: 100 }],
+      asks: [{ price: 0.35, size: 100 }],
+      timestamp: new Date().toISOString(),
+    }),
+    resolve: async (symbol) => ({
+      symbol,
+      resolved: false,
+      outcome: null,
+      settlementPrice: null,
+      timestamp: new Date().toISOString(),
+    }),
+  };
+
+  const registry = new MarketRegistry();
+  registry.register(mockAdapter);
+
+  app = createApp({ registry });
 });
 
 afterAll(async () => {
@@ -165,5 +200,53 @@ describe("api integration", () => {
       const typed = event as { type?: string };
       return typed.type === "journal";
     })).toBe(true);
+  });
+
+  it("fills marketable limit orders immediately", async () => {
+    const registerResponse = await app.request("/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "limit-fill-agent" }),
+    });
+
+    expect(registerResponse.status).toBe(201);
+    const registerPayload = await registerResponse.json();
+
+    const apiKey = registerPayload.apiKey as string;
+    const accountId = registerPayload.account.id as string;
+
+    const placeOrderResponse = await app.request("/api/orders", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        accountId,
+        market: "polymarket",
+        symbol: "0x-cross-symbol",
+        side: "buy",
+        type: "limit",
+        quantity: 10,
+        limitPrice: 0.4,
+        reasoning: "Crossing quote should fill instantly",
+      }),
+    });
+
+    expect(placeOrderResponse.status).toBe(201);
+    const order = await placeOrderResponse.json();
+    expect(order.status).toBe("filled");
+    expect(order.filledPrice).toBe(0.35);
+
+    const positionsResponse = await app.request(`/api/positions?accountId=${accountId}`, {
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+      },
+    });
+    expect(positionsResponse.status).toBe(200);
+    const positionsPayload = await positionsResponse.json();
+    expect(Array.isArray(positionsPayload.positions)).toBe(true);
+    expect(positionsPayload.positions).toHaveLength(1);
+    expect(positionsPayload.positions[0].quantity).toBe(10);
   });
 });

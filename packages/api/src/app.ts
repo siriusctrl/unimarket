@@ -29,6 +29,9 @@ import { createApiKey, hashApiKey, keyPrefix, makeId, nowIso } from "./utils.js"
 
 type App = Hono<{ Variables: AppVariables }>;
 type AppContext = Context<{ Variables: AppVariables }>;
+export type CreateAppOptions = {
+  registry?: MarketRegistry;
+};
 
 const getValidationErrorPayload = (
   error: z.ZodError,
@@ -137,10 +140,13 @@ const getOwnedAccount = async (userId: string, accountId: string) => {
   );
 };
 
-const registry = new MarketRegistry();
-registry.register(new PolymarketAdapter());
+const createDefaultRegistry = (): MarketRegistry => {
+  const registry = new MarketRegistry();
+  registry.register(new PolymarketAdapter());
+  return registry;
+};
 
-const createOpenApiDocument = () => {
+const createOpenApiDocument = (registry: MarketRegistry) => {
   const marketIds = registry.list().map((market) => market.id);
 
   return {
@@ -301,8 +307,9 @@ const createOpenApiDocument = () => {
   };
 };
 
-export const createApp = (): App => {
+export const createApp = (options: CreateAppOptions = {}): App => {
   const app = new Hono<{ Variables: AppVariables }>();
+  const registry = options.registry ?? createDefaultRegistry();
 
   app.get("/health", (c) => {
     const descriptors = registry.list();
@@ -311,7 +318,7 @@ export const createApp = (): App => {
   });
 
   app.get("/openapi.json", (c) => {
-    return c.json(createOpenApiDocument());
+    return c.json(createOpenApiDocument(registry));
   });
 
   app.post(
@@ -634,95 +641,122 @@ export const createApp = (): App => {
         createdAt,
       };
 
-      if (parsed.data.type === "limit") {
-        await db.insert(orders).values(baseOrder).run();
-        return c.json(baseOrder, 201);
-      }
+      const persistFilledOrder = async (executionPrice: number): Promise<Response> => {
+        const existingPosition = await getFirst(
+          db
+            .select()
+            .from(positions)
+            .where(
+              and(
+                eq(positions.accountId, account.id),
+                eq(positions.market, parsed.data.market),
+                eq(positions.symbol, parsed.data.symbol),
+              ),
+            )
+            .limit(1)
+            .all(),
+        );
 
-      const quote = await adapter.getQuote(parsed.data.symbol);
-      const executionPrice = parsed.data.side === "buy" ? (quote.ask ?? quote.price) : (quote.bid ?? quote.price);
-
-      const existingPosition = await getFirst(
-        db
-          .select()
-          .from(positions)
-          .where(
-            and(
-              eq(positions.accountId, account.id),
-              eq(positions.market, parsed.data.market),
-              eq(positions.symbol, parsed.data.symbol),
-            ),
-          )
-          .limit(1)
-          .all(),
-      );
-
-      const fillResult = executeFill({
-        balance: account.balance,
-        position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
-        side: parsed.data.side,
-        quantity: parsed.data.quantity,
-        price: executionPrice,
-        allowShort: false,
-      });
-
-      await db
-        .update(accounts)
-        .set({ balance: fillResult.nextBalance })
-        .where(eq(accounts.id, account.id))
-        .run();
-
-      if (!fillResult.nextPosition) {
-        if (existingPosition) {
-          await db.delete(positions).where(eq(positions.id, existingPosition.id)).run();
-        }
-      } else if (existingPosition) {
-        await db
-          .update(positions)
-          .set({ quantity: fillResult.nextPosition.quantity, avgCost: fillResult.nextPosition.avgCost })
-          .where(eq(positions.id, existingPosition.id))
-          .run();
-      } else {
-        await db
-          .insert(positions)
-          .values({
-            id: makeId("pos"),
-            accountId: account.id,
-            market: parsed.data.market,
-            symbol: parsed.data.symbol,
-            quantity: fillResult.nextPosition.quantity,
-            avgCost: fillResult.nextPosition.avgCost,
-          })
-          .run();
-      }
-
-      await db
-        .insert(trades)
-        .values({
-          id: makeId("trd"),
-          orderId,
-          accountId: account.id,
-          market: parsed.data.market,
-          symbol: parsed.data.symbol,
+        const fillResult = executeFill({
+          balance: account.balance,
+          position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
           side: parsed.data.side,
           quantity: parsed.data.quantity,
           price: executionPrice,
-          createdAt,
-        })
-        .run();
+          allowShort: false,
+        });
 
-      await db
-        .insert(orders)
-        .values({
-          ...baseOrder,
-          status: "filled",
-          filledPrice: executionPrice,
-          filledAt: createdAt,
-        })
-        .run();
+        await db
+          .update(accounts)
+          .set({ balance: fillResult.nextBalance })
+          .where(eq(accounts.id, account.id))
+          .run();
 
-      const filled = await getFirst(db.select().from(orders).where(eq(orders.id, orderId)).limit(1).all());
-      return c.json(filled, 201);
+        if (!fillResult.nextPosition) {
+          if (existingPosition) {
+            await db.delete(positions).where(eq(positions.id, existingPosition.id)).run();
+          }
+        } else if (existingPosition) {
+          await db
+            .update(positions)
+            .set({ quantity: fillResult.nextPosition.quantity, avgCost: fillResult.nextPosition.avgCost })
+            .where(eq(positions.id, existingPosition.id))
+            .run();
+        } else {
+          await db
+            .insert(positions)
+            .values({
+              id: makeId("pos"),
+              accountId: account.id,
+              market: parsed.data.market,
+              symbol: parsed.data.symbol,
+              quantity: fillResult.nextPosition.quantity,
+              avgCost: fillResult.nextPosition.avgCost,
+            })
+            .run();
+        }
+
+        await db
+          .insert(trades)
+          .values({
+            id: makeId("trd"),
+            orderId,
+            accountId: account.id,
+            market: parsed.data.market,
+            symbol: parsed.data.symbol,
+            side: parsed.data.side,
+            quantity: parsed.data.quantity,
+            price: executionPrice,
+            createdAt,
+          })
+          .run();
+
+        await db
+          .insert(orders)
+          .values({
+            ...baseOrder,
+            status: "filled",
+            filledPrice: executionPrice,
+            filledAt: createdAt,
+          })
+          .run();
+
+        const filled = await getFirst(db.select().from(orders).where(eq(orders.id, orderId)).limit(1).all());
+        return c.json(filled, 201);
+      };
+
+      const quoteSidePrice = (price: { price: number; bid?: number; ask?: number }): number => {
+        return parsed.data.side === "buy" ? (price.ask ?? price.price) : (price.bid ?? price.price);
+      };
+
+      if (parsed.data.type === "limit") {
+        let executionPrice: number | null = null;
+
+        try {
+          const quote = await adapter.getQuote(parsed.data.symbol);
+          const candidatePrice = quoteSidePrice(quote);
+          const limitPrice = parsed.data.limitPrice as number;
+          const shouldFillNow =
+            parsed.data.side === "buy" ? candidatePrice <= limitPrice : candidatePrice >= limitPrice;
+
+          if (shouldFillNow) {
+            executionPrice = candidatePrice;
+          }
+        } catch {
+          executionPrice = null;
+        }
+
+        if (executionPrice === null) {
+          await db.insert(orders).values(baseOrder).run();
+          return c.json(baseOrder, 201);
+        }
+
+        return persistFilledOrder(executionPrice);
+      }
+
+      const quote = await adapter.getQuote(parsed.data.symbol);
+      const executionPrice = quoteSidePrice(quote);
+      return persistFilledOrder(executionPrice);
     }),
   );
 
