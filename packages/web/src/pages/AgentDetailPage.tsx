@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ArrowLeft, CircleAlert, RefreshCw, Timeline } from "lucide-react";
+import { ArrowLeft, CircleAlert, Clock, RefreshCw } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { LoadingState } from "../components/LoadingState";
@@ -145,7 +145,7 @@ export const AgentDetailPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Timeline className="h-4 w-4" />
+                  <Clock className="h-4 w-4" />
                   Decision Timeline
                 </CardTitle>
                 <CardDescription>Audit trail for automated actions.</CardDescription>

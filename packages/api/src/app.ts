@@ -1,5 +1,6 @@
 import { MarketRegistry, PolymarketAdapter } from "@unimarket/markets";
 import { Hono } from "hono";
+import { serveStatic } from "@hono/node-server/serve-static";
 
 import { adminOnlyMiddleware, authMiddleware, type AppVariables } from "./auth.js";
 import { createAccountRoutes } from "./routes/account.js";
@@ -12,6 +13,7 @@ import { positionsRoutes } from "./routes/positions.js";
 
 export type CreateAppOptions = {
   registry?: MarketRegistry;
+  webDistPath?: string;
 };
 
 export const createDefaultRegistry = (): MarketRegistry => {
@@ -95,6 +97,12 @@ export const createApp = (options: CreateAppOptions = {}) => {
 
   app.use("/api/admin/*", adminOnlyMiddleware);
   app.route("/api/admin", createAdminRoutes(registry));
+
+  // Serve Vite build output as static files
+  const webDistRoot = options.webDistPath ?? "../web/dist";
+  app.use("/*", serveStatic({ root: webDistRoot }));
+  // SPA fallback: serve index.html for non-API, non-file routes
+  app.get("/*", serveStatic({ root: webDistRoot, path: "index.html" }));
 
   return app;
 };
