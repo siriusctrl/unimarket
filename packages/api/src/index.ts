@@ -1,20 +1,21 @@
 import { serve } from "@hono/node-server";
 
-import { createApp } from "./app.js";
+import { createApp, createDefaultRegistry } from "./app.js";
 import { migrate } from "./db/client.js";
+import { startReconciler } from "./reconciler.js";
 
 const port = Number(process.env.PORT ?? 3100);
 
 const bootstrap = async (): Promise<void> => {
   await migrate();
 
-  const app = createApp();
-  serve({
-    fetch: app.fetch,
-    port,
-  });
+  const registry = createDefaultRegistry();
+  const app = createApp({ registry });
 
-  console.log(`paper-trade API is running at http://localhost:${port}`);
+  serve({ fetch: app.fetch, port });
+  startReconciler(registry);
+
+  console.log(`unimarket API is running at http://localhost:${port}`);
 };
 
 void bootstrap();

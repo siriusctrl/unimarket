@@ -3,8 +3,8 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { INITIAL_BALANCE } from "@paper-trade/core";
-import { MarketAdapterError, MarketRegistry, type MarketAdapter } from "@paper-trade/markets";
+import { INITIAL_BALANCE } from "@unimarket/core";
+import { MarketAdapterError, MarketRegistry, type MarketAdapter } from "@unimarket/markets";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -25,7 +25,7 @@ type RegisterPayload = {
 type DbModule = Awaited<typeof import("../src/db/client.js")>;
 type SchemaModule = Awaited<typeof import("../src/db/schema.js")>;
 
-const dbFilePath = join(tmpdir(), `paper-trade-test-${randomUUID()}.sqlite`);
+const dbFilePath = join(tmpdir(), `unimarket-test-${randomUUID()}.sqlite`);
 process.env.DB_URL = `file:${dbFilePath}`;
 process.env.ADMIN_API_KEY = "admin_test_key";
 

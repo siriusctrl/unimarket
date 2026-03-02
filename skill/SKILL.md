@@ -1,5 +1,5 @@
 ---
-name: paper-trade
+name: unimarket
 description: >
   Paper trading platform API for simulated trading on prediction markets (Polymarket) and more.
   Use when an agent needs to: place simulated trades, check portfolio positions and P&L,

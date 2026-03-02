@@ -42,7 +42,7 @@ jobs:
         run: corepack pnpm coverage
 
       - name: Build Web
-        run: corepack pnpm --filter @paper-trade/web build
+        run: corepack pnpm --filter @unimarket/web build
 
       - name: Upload Coverage Artifacts
         if: always()

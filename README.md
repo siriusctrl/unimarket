@@ -1,4 +1,4 @@
-# paper-trade
+# unimarket
 
 Open paper trading platform for prediction markets and beyond. Built for humans and agents alike.
 
@@ -67,7 +67,7 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 ## Project Structure
 
 ```
-paper-trade/
+unimarket/
 ├── packages/
 │   ├── core/             # Trading engine — pure logic, no I/O
 │   │   ├── account.ts    # Account management, initial balance

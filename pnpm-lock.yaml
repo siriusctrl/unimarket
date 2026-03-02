@@ -32,10 +32,10 @@ importers:
       '@libsql/client':
         specifier: ^0.15.2
         version: 0.15.15
-      '@paper-trade/core':
+      '@unimarket/core':
         specifier: workspace:*
         version: link:../core
-      '@paper-trade/markets':
+      '@unimarket/markets':
         specifier: workspace:*
         version: link:../markets
       drizzle-orm:
@@ -56,7 +56,7 @@ importers:
 
   packages/markets:
     dependencies:
-      '@paper-trade/core':
+      '@unimarket/core':
         specifier: workspace:*
         version: link:../core
 

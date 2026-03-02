@@ -1,5 +1,5 @@
 {
-  "name": "@paper-trade/api",
+  "name": "@unimarket/api",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -12,8 +12,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@paper-trade/core": "workspace:*",
-    "@paper-trade/markets": "workspace:*",
+    "@unimarket/core": "workspace:*",
+    "@unimarket/markets": "workspace:*",
     "@hono/node-server": "^1.14.2",
     "@libsql/client": "^0.15.2",
     "drizzle-orm": "^0.41.0",

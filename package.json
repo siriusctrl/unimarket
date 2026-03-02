@@ -1,13 +1,13 @@
 {
-  "name": "paper-trade",
+  "name": "unimarket",
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "corepack pnpm --parallel --filter @paper-trade/api --filter @paper-trade/web dev",
-    "dev:api": "corepack pnpm --filter @paper-trade/api dev",
-    "dev:web": "corepack pnpm --filter @paper-trade/web dev",
-    "coverage": "corepack pnpm --filter @paper-trade/core test:coverage && corepack pnpm --filter @paper-trade/markets test:coverage && corepack pnpm --filter @paper-trade/api test:coverage",
+    "dev": "corepack pnpm --parallel --filter @unimarket/api --filter @unimarket/web dev",
+    "dev:api": "corepack pnpm --filter @unimarket/api dev",
+    "dev:web": "corepack pnpm --filter @unimarket/web dev",
+    "coverage": "corepack pnpm --filter @unimarket/core test:coverage && corepack pnpm --filter @unimarket/markets test:coverage && corepack pnpm --filter @unimarket/api test:coverage",
     "test": "corepack pnpm -r test",
     "typecheck": "corepack pnpm -r typecheck"
   },

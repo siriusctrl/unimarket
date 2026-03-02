@@ -5,8 +5,8 @@
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
-      "@paper-trade/core": ["packages/core/src/index.ts"],
-      "@paper-trade/markets": ["packages/markets/src/index.ts"]
+      "@unimarket/core": ["packages/core/src/index.ts"],
+      "@unimarket/markets": ["packages/markets/src/index.ts"]
     },
     "strict": true,
     "declaration": true,

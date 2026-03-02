@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/libsql";
 
 import * as schema from "./schema.js";
 
-const rawDbUrl = process.env.DB_URL ?? process.env.DB_PATH ?? "file:paper-trade.sqlite";
+const rawDbUrl = process.env.DB_URL ?? process.env.DB_PATH ?? "file:unimarket.sqlite";
 const dbUrl = rawDbUrl.includes(":") ? rawDbUrl : `file:${rawDbUrl}`;
 
 export const sqlite = createClient({ url: dbUrl });
