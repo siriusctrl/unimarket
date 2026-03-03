@@ -1,35 +1,50 @@
 import { useMemo, useState } from "react";
-import { ArrowUpRight, CircleAlert, RefreshCw, Search, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  RefreshCw,
+  Search,
+  Users,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { KpiCard } from "../components/KpiCard";
-import { LoadingState } from "../components/LoadingState";
-import { MarketCharts } from "../components/MarketCharts";
-import { PositionsTable } from "../components/PositionsTable";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { LoadingState } from "../components/LoadingState";
 import {
-  buildAgentMix,
   chartPalette,
   clearAdminKey,
-  flattenPositions,
   formatCompactNumber,
   formatCurrency,
   formatNumber,
   formatSignedCurrency,
-  type MarketChartRow,
   readStoredAdminKey,
 } from "../lib/admin";
 import { useAdminOverview } from "../lib/useAdminOverview";
+import { useEquityHistory } from "../lib/useEquityHistory";
+
+const AGENTS_PER_PAGE = 6;
+const RANGE_OPTIONS = ["1w", "1m", "3m", "6m", "1y"] as const;
+const RANGE_LABELS: Record<string, string> = {
+  "1w": "1W",
+  "1m": "1M",
+  "3m": "3M",
+  "6m": "6M",
+  "1y": "1Y",
+};
+type ChartMode = "equity" | "return";
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const adminKey = readStoredAdminKey();
-  const [search, setSearch] = useState<string>("");
-  const [marketFilter, setMarketFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [range, setRange] = useState<string>("1m");
+  const [chartMode, setChartMode] = useState<ChartMode>("equity");
 
   const handleAuthError = () => {
     clearAdminKey();
@@ -37,59 +52,108 @@ export const DashboardPage = () => {
   };
 
   const { overview, error, loading, refresh } = useAdminOverview({ adminKey, onAuthError: handleAuthError });
+  const { data: historyData, loading: historyLoading } = useEquityHistory({ adminKey, range });
 
   const generatedAtLabel = useMemo(() => {
-    if (!overview?.generatedAt) {
-      return "-";
-    }
-
+    if (!overview?.generatedAt) return "-";
     return new Date(overview.generatedAt).toLocaleString();
   }, [overview?.generatedAt]);
 
-  const positionRows = useMemo(() => flattenPositions(overview), [overview]);
-
-  const marketOptions = useMemo(() => {
-    const set = new Set(positionRows.map((row) => row.market));
-    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [positionRows]);
-
-  const filteredRows = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    return positionRows.filter((row) => {
-      const matchesMarket = marketFilter === "all" || row.market === marketFilter;
-      if (!matchesMarket) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      const searchable = [row.userName, row.userId, row.accountName ?? "", row.market, row.symbol]
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(normalizedSearch);
-    });
-  }, [marketFilter, positionRows, search]);
-
-  const marketChartData = useMemo<MarketChartRow[]>(() => {
-    if (!overview) {
-      return [];
+  /* ----- build chart data from equity history ----- */
+  const { chartData, agentNames, agentColors } = useMemo(() => {
+    if (!historyData || historyData.series.length === 0) {
+      return { chartData: [], agentNames: [] as string[], agentColors: {} as Record<string, string> };
     }
 
-    return [...overview.markets]
-      .sort((a, b) => b.totalMarketValue - a.totalMarketValue)
-      .slice(0, 8)
-      .map((market) => ({
-        name: market.marketName,
-        value: Number(market.totalMarketValue.toFixed(2)),
-        pnl: Number(market.totalUnrealizedPnl.toFixed(2)),
-      }));
-  }, [overview]);
+    // Collect all unique timestamps across all agents
+    const timestampSet = new Set<string>();
+    for (const agent of historyData.series) {
+      for (const snap of agent.snapshots) {
+        timestampSet.add(snap.snapshotAt);
+      }
+    }
+    const allTimestamps = [...timestampSet].sort();
 
-  const agentMixData = useMemo(() => buildAgentMix(overview), [overview]);
+    // Build name list + color map
+    const names = historyData.series.map((s) => s.userName);
+    const colors: Record<string, string> = {};
+    historyData.series.forEach((s, i) => {
+      colors[s.userName] = chartPalette[i % chartPalette.length];
+    });
+
+    // For return mode, we need the initial equity for each agent
+    const initialEquity: Record<string, number> = {};
+    if (chartMode === "return") {
+      for (const agent of historyData.series) {
+        if (agent.snapshots.length > 0) {
+          initialEquity[agent.userName] = agent.snapshots[0].equity;
+        }
+      }
+    }
+
+    // Build per-timestamp map for each agent (for fast lookup)
+    const agentDataMap = new Map<string, Map<string, number>>();
+    for (const agent of historyData.series) {
+      const map = new Map<string, number>();
+      for (const snap of agent.snapshots) {
+        const value =
+          chartMode === "return"
+            ? initialEquity[agent.userName]
+              ? ((snap.equity - initialEquity[agent.userName]) / initialEquity[agent.userName]) * 100
+              : 0
+            : snap.equity;
+        map.set(snap.snapshotAt, Number(value.toFixed(2)));
+      }
+      agentDataMap.set(agent.userName, map);
+    }
+
+    // Fill chart rows: each row has a timestamp + one key per agent
+    const data = allTimestamps.map((ts) => {
+      const row: Record<string, string | number> = {
+        time: new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      };
+      for (const agent of historyData.series) {
+        const val = agentDataMap.get(agent.userName)?.get(ts);
+        if (val !== undefined) row[agent.userName] = val;
+      }
+      return row;
+    });
+
+    return { chartData: data, agentNames: names, agentColors: colors };
+  }, [historyData, chartMode]);
+
+  /* ----- filtered + paginated agents ----- */
+  const filteredAgents = useMemo(() => {
+    if (!overview) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return overview.agents;
+    return overview.agents.filter((agent) =>
+      [agent.userName, agent.userId].join(" ").toLowerCase().includes(q),
+    );
+  }, [overview, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAgents.length / AGENTS_PER_PAGE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedAgents = filteredAgents.slice(safePage * AGENTS_PER_PAGE, (safePage + 1) * AGENTS_PER_PAGE);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
+  const tickStyle = {
+    fill: "hsl(var(--muted-foreground))",
+    fontSize: 11,
+    fontFamily: "IBM Plex Mono, monospace",
+  };
+
+  const tooltipStyle = {
+    backgroundColor: "hsl(var(--popover) / 0.97)",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "12px",
+    color: "hsl(var(--popover-foreground))",
+    boxShadow: "var(--shadow-panel)",
+  } as const;
 
   if (loading && !overview) {
     return <LoadingState />;
@@ -97,16 +161,17 @@ export const DashboardPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <Card className="border-primary/25 bg-card/55 backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-300">
         <CardHeader className="gap-4 md:flex-row md:items-center md:justify-between md:space-y-0">
           <div className="space-y-2">
             <Badge variant="secondary" className="w-fit gap-1 border border-border/40">
               <Users className="h-3 w-3" />
-              Admin Overview
+              Admin Dashboard
             </Badge>
-            <CardTitle className="text-3xl font-bold tracking-tight sm:text-4xl">Unimarket Portfolio Atlas</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-tight sm:text-4xl">Agent Overview</CardTitle>
             <CardDescription>
-              Live market totals and user holdings from <span className="font-mono">/api/admin/overview</span>
+              Monitor all agents, their holdings, and performance.
             </CardDescription>
           </div>
 
@@ -134,163 +199,242 @@ export const DashboardPage = () => {
 
       {overview ? (
         <>
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
-            <KpiCard
-              title="Portfolio Equity"
-              value={formatCurrency(overview.totals.equity)}
-              detail={`${formatCompactNumber(overview.totals.users)} users across all markets`}
-            />
-            <KpiCard title="Cash Balance" value={formatCurrency(overview.totals.balance)} detail="Single account per user" />
-            <KpiCard
-              title="Marked Value"
-              value={formatCurrency(overview.totals.marketValue)}
-              detail={`${formatCompactNumber(overview.totals.positions)} open positions`}
-            />
-            <KpiCard
-              title="Unrealized PnL"
-              value={formatSignedCurrency(overview.totals.unrealizedPnl)}
-              detail="Based on latest cached market marks"
-            />
-          </section>
-
-          <MarketCharts marketChartData={marketChartData} agentMixData={agentMixData} />
-
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {overview.markets.map((market, index) => (
-              <Card key={market.marketId} className="relative overflow-hidden bg-card/50 hover:-translate-y-0.5 hover:border-primary/30">
-                <div
-                  className="pointer-events-none absolute right-0 top-0 h-24 w-24 -translate-y-8 translate-x-8 rounded-full opacity-30 blur-sm"
-                  style={{ backgroundColor: chartPalette[index % chartPalette.length] }}
-                />
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{market.marketName}</CardTitle>
-                  <CardDescription className="font-mono text-xs">{market.marketId}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Market Value</span>
-                    <span className="font-semibold">{formatCurrency(market.totalMarketValue)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Unrealized PnL</span>
-                    <span
-                      className={
-                        market.totalUnrealizedPnl >= 0
-                          ? "font-medium text-emerald-600 dark:text-emerald-400"
-                          : "font-medium text-rose-600 dark:text-rose-400"
-                      }
+          {/* Equity / Return line chart */}
+          <Card className="border-border/75 bg-card/55 hover:border-primary/35 animate-in fade-in-0 duration-300">
+            <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
+              <div>
+                <CardTitle>{chartMode === "equity" ? "Net Value Trend" : "Return Rate Trend"}</CardTitle>
+                <CardDescription>
+                  {chartMode === "equity"
+                    ? "Agent portfolio equity over time"
+                    : "Percentage return since start of period"}
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Mode toggle */}
+                <div className="flex rounded-lg border border-border/50 p-0.5">
+                  <Button
+                    variant={chartMode === "equity" ? "default" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setChartMode("equity")}
+                  >
+                    Net Value
+                  </Button>
+                  <Button
+                    variant={chartMode === "return" ? "default" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setChartMode("return")}
+                  >
+                    Return %
+                  </Button>
+                </div>
+                {/* Time range */}
+                <div className="flex rounded-lg border border-border/50 p-0.5">
+                  {RANGE_OPTIONS.map((r) => (
+                    <Button
+                      key={r}
+                      variant={range === r ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 w-9 p-0 text-xs"
+                      onClick={() => setRange(r)}
                     >
-                      {formatSignedCurrency(market.totalUnrealizedPnl)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Users</span>
-                    <span>{formatNumber(market.users)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Positions</span>
-                    <span>{formatNumber(market.positions)}</span>
-                  </div>
+                      {RANGE_LABELS[r]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="h-[340px]">
+              {historyLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Loading chart data…
+                </div>
+              ) : chartData.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  No historical data yet. Snapshots are recorded each time you refresh.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                    <XAxis
+                      dataKey="time"
+                      tick={tickStyle}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tickFormatter={(v) =>
+                        chartMode === "return" ? `${v}%` : formatCompactNumber(v)
+                      }
+                      tick={tickStyle}
+                      axisLine={false}
+                      tickLine={false}
+                      width={64}
+                    />
+                    <Tooltip
+                      formatter={(value: number) =>
+                        chartMode === "return"
+                          ? `${value.toFixed(2)}%`
+                          : formatCurrency(value)
+                      }
+                      contentStyle={tooltipStyle}
+                      labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                    />
+                    <Legend />
+                    {agentNames.map((name) => (
+                      <Line
+                        key={name}
+                        type="monotone"
+                        dataKey={name}
+                        stroke={agentColors[name]}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4 }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Agent cards grid with search + pagination */}
+          <section className="space-y-3 animate-in fade-in-0 duration-300">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold tracking-tight">All Agents</h2>
+              <div className="relative w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  placeholder="Search agents…"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            {filteredAgents.length === 0 ? (
+              <Card className="bg-card/55">
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  {search ? "No agents match your search." : "No agent accounts found."}
                 </CardContent>
               </Card>
-            ))}
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-[1.6fr_1fr] animate-in fade-in-0 duration-300">
-            <Card className="bg-card/55 hover:border-primary/30">
-              <CardHeader>
-                <CardTitle>Position Explorer</CardTitle>
-                <CardDescription>Filter and sort holdings by user, market, and symbol.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Search user, market, symbol"
-                      className="pl-9"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    {marketOptions.map((option) => (
-                      <Button
-                        key={option}
-                        size="sm"
-                        variant={marketFilter === option ? "default" : "outline"}
-                        className="shrink-0"
-                        onClick={() => setMarketFilter(option)}
-                      >
-                        {option}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <PositionsTable rows={filteredRows} />
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/55 hover:border-primary/30">
-              <CardHeader>
-                <CardTitle>Agent Summary</CardTitle>
-                <CardDescription>Click any agent to view balances and positions.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Agent</TableHead>
-                      <TableHead>Positions</TableHead>
-                      <TableHead>Equity</TableHead>
-                      <TableHead>PnL</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {overview.agents.map((agent) => (
-                      <TableRow
-                        key={agent.userId}
-                        className="cursor-pointer transition-all duration-200 hover:bg-accent/60"
-                        onClick={() => navigate(`/agents/${agent.userId}`)}
-                      >
-                        <TableCell>
+            ) : (
+              <>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {pagedAgents.map((agent) => (
+                    <Card
+                      key={agent.userId}
+                      className="cursor-pointer bg-card/55 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                      onClick={() => navigate(`/agents/${agent.userId}`)}
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
                           <div className="space-y-0.5">
-                            <p className="font-medium">{agent.userName}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{agent.userId}</p>
+                            <CardTitle className="text-lg">{agent.userName}</CardTitle>
+                            <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
                           </div>
-                        </TableCell>
-                        <TableCell>{formatNumber(agent.totals.positions)}</TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(agent.totals.equity)}</TableCell>
-                        <TableCell
-                          className={
-                            agent.totals.unrealizedPnl >= 0
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-rose-600 dark:text-rose-400"
-                          }
-                        >
-                          {formatSignedCurrency(agent.totals.unrealizedPnl)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {overview.agents.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="h-16 text-center text-muted-foreground">
-                          No agent accounts found.
-                        </TableCell>
-                      </TableRow>
-                    ) : null}
-                  </TableBody>
-                </Table>
-                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Showing {overview.agents.length} agents</span>
-                  <div className="flex items-center gap-2">
-                    <ArrowUpRight className="h-3 w-3" />
-                    Click an agent row to drill down.
-                  </div>
+                          <Badge variant="outline" className="shrink-0">
+                            {formatNumber(agent.totals.positions)} pos
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Equity</p>
+                            <p className="text-lg font-semibold">{formatCurrency(agent.totals.equity)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Cash</p>
+                            <p className="text-lg font-semibold">{formatCurrency(agent.balance)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                          <span className="text-xs text-muted-foreground">Unrealized PnL</span>
+                          <span
+                            className={
+                              agent.totals.unrealizedPnl >= 0
+                                ? "font-medium text-emerald-600 dark:text-emerald-400"
+                                : "font-medium text-rose-600 dark:text-rose-400"
+                            }
+                          >
+                            {formatSignedCurrency(agent.totals.unrealizedPnl)}
+                          </span>
+                        </div>
+
+                        {/* Top positions preview */}
+                        {agent.positions.length > 0 ? (
+                          <div className="space-y-1 border-t border-border/50 pt-2">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Holdings
+                            </p>
+                            {agent.positions.slice(0, 3).map((pos) => (
+                              <div key={`${pos.market}:${pos.symbol}`} className="flex items-center justify-between text-xs">
+                                <span className="font-mono text-muted-foreground truncate max-w-[140px]">
+                                  {pos.symbol}
+                                </span>
+                                <span className="font-medium">{formatCurrency(pos.marketValue)}</span>
+                              </div>
+                            ))}
+                            {agent.positions.length > 3 ? (
+                              <p className="text-[10px] text-muted-foreground">
+                                +{agent.positions.length - 3} more
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Pagination */}
+                {totalPages > 1 ? (
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Showing {safePage * AGENTS_PER_PAGE + 1}–{Math.min((safePage + 1) * AGENTS_PER_PAGE, filteredAgents.length)} of {filteredAgents.length} agents
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={safePage === 0}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      {Array.from({ length: totalPages }, (_, i) => (
+                        <Button
+                          key={i}
+                          variant={i === safePage ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setPage(i)}
+                          className="h-8 w-8 p-0 text-xs"
+                        >
+                          {i + 1}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={safePage >= totalPages - 1}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        className="h-8 w-8 p-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            )}
           </section>
         </>
       ) : (

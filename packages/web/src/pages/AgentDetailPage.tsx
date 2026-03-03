@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { ArrowLeft, CircleAlert, Clock, RefreshCw } from "lucide-react";
+import { ArrowLeft, CircleAlert, RefreshCw } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { ActivityFeed } from "../components/ActivityFeed";
 import { LoadingState } from "../components/LoadingState";
 import { PositionsTable } from "../components/PositionsTable";
 import { Badge } from "../components/ui/badge";
@@ -16,6 +17,7 @@ import {
   readStoredAdminKey,
 } from "../lib/admin";
 import { useAdminOverview } from "../lib/useAdminOverview";
+import { useAgentTimeline } from "../lib/useAgentTimeline";
 
 export const AgentDetailPage = () => {
   const navigate = useNavigate();
@@ -30,14 +32,21 @@ export const AgentDetailPage = () => {
   const { overview, error, loading, refresh } = useAdminOverview({ adminKey, onAuthError: handleAuthError });
 
   const agent = useMemo(() => {
-    if (!overview || !id) {
-      return null;
-    }
-
+    if (!overview || !id) return null;
     return overview.agents.find((entry) => entry.userId === id) ?? null;
   }, [id, overview]);
 
   const positions = useMemo(() => (agent ? flattenAgentPositions(agent) : []), [agent]);
+
+  const {
+    events,
+    loading: timelineLoading,
+    error: timelineError,
+    page: timelinePage,
+    hasMore,
+    nextPage,
+    prevPage,
+  } = useAgentTimeline({ userId: id, adminKey });
 
   if (loading && !overview) {
     return <LoadingState label="Loading agent snapshot..." />;
@@ -58,6 +67,7 @@ export const AgentDetailPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="ghost" className="gap-2" onClick={() => navigate("/dashboard")}>
           <ArrowLeft className="h-4 w-4" />
@@ -80,6 +90,7 @@ export const AgentDetailPage = () => {
 
       {agent ? (
         <>
+          {/* Agent header */}
           <Card className="border-primary/25 bg-card/55 shadow-panel backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-300">
             <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div className="space-y-2">
@@ -90,8 +101,9 @@ export const AgentDetailPage = () => {
                 <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">single account</Badge>
-                <Badge>{formatNumber(agent.totals.positions)} positions</Badge>
+                <Badge variant="outline">
+                  {formatNumber(agent.totals.positions)} positions
+                </Badge>
                 <Badge variant={agent.totals.unrealizedPnl >= 0 ? "success" : "danger"}>
                   {formatSignedCurrency(agent.totals.unrealizedPnl)}
                 </Badge>
@@ -99,7 +111,8 @@ export const AgentDetailPage = () => {
             </CardHeader>
           </Card>
 
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 animate-in fade-in-0 duration-300">
+          {/* KPI cards */}
+          <section className="grid gap-4 md:grid-cols-3 animate-in fade-in-0 duration-300">
             <Card className="bg-card/55 hover:border-primary/30">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Cash Balance</CardTitle>
@@ -137,7 +150,8 @@ export const AgentDetailPage = () => {
             </Card>
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-[1.6fr_1fr] animate-in fade-in-0 duration-300">
+          {/* Positions + Activity */}
+          <section className="space-y-4 animate-in fade-in-0 duration-300">
             <Card className="bg-card/55 hover:border-primary/30">
               <CardHeader>
                 <CardTitle>Open Positions</CardTitle>
@@ -148,20 +162,17 @@ export const AgentDetailPage = () => {
               </CardContent>
             </Card>
 
-            <Card className="bg-card/55 hover:border-primary/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Decision Timeline
-                </CardTitle>
-                <CardDescription>Audit trail for automated actions.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-xl border border-dashed border-muted-foreground/35 bg-muted/35 p-4 text-sm text-muted-foreground">
-                  Timeline entries are not available from the overview endpoint yet.
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-4">
+              {timelineError ? (
+                <Card className="border-destructive/40 bg-destructive/10 shadow-none">
+                  <CardContent className="flex items-center gap-2 py-4 text-sm text-destructive">
+                    <CircleAlert className="h-4 w-4" />
+                    {timelineError}
+                  </CardContent>
+                </Card>
+              ) : null}
+              <ActivityFeed events={events} loading={timelineLoading} page={timelinePage} hasMore={hasMore} onNextPage={nextPage} onPrevPage={prevPage} />
+            </div>
           </section>
         </>
       ) : (

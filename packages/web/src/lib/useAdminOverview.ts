@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type OverviewResponse } from "./admin";
 
@@ -15,17 +15,21 @@ export const useAdminOverview = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
+  // Use refs to avoid re-creating fetchOverview when callbacks change
+  const overviewRef = useRef(overview);
+  overviewRef.current = overview;
+  const onAuthErrorRef = useRef(onAuthError);
+  onAuthErrorRef.current = onAuthError;
+
   const fetchOverview = useCallback(
-    async (silent = false): Promise<void> => {
+    async (): Promise<void> => {
       if (!adminKey) {
         setError("Missing admin key. Please sign in.");
         setOverview(null);
         return;
       }
 
-      if (!silent) {
-        setLoading(true);
-      }
+      setLoading(true);
 
       try {
         const response = await fetch("/api/admin/overview", {
@@ -36,7 +40,7 @@ export const useAdminOverview = ({
 
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {
-            onAuthError();
+            onAuthErrorRef.current();
             throw new Error(AUTH_ERROR_MESSAGE);
           }
           throw new Error(`Request failed with status ${response.status}`);
@@ -46,42 +50,31 @@ export const useAdminOverview = ({
         setOverview(payload);
         setError(null);
       } catch (fetchError) {
-        if (fetchError instanceof Error) {
-          setError(fetchError.message);
-        } else {
-          setError("Unknown error while loading overview.");
+        // Only show error if we have no data yet — otherwise keep stale data visible
+        if (!overviewRef.current) {
+          if (fetchError instanceof Error) {
+            setError(fetchError.message);
+          } else {
+            setError("Unknown error while loading overview.");
+          }
         }
       } finally {
         setLoading(false);
       }
     },
-    [adminKey, onAuthError],
+    [adminKey],
   );
 
+  // Fetch once on mount
   useEffect(() => {
-    if (!adminKey) {
-      return;
-    }
-
+    if (!adminKey) return;
     void fetchOverview();
-  }, [adminKey, fetchOverview]);
-
-  useEffect(() => {
-    if (!adminKey) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      void fetchOverview(true);
-    }, 20_000);
-
-    return () => window.clearInterval(timer);
   }, [adminKey, fetchOverview]);
 
   return {
     overview,
     error,
     loading,
-    refresh: () => fetchOverview(false),
+    refresh: fetchOverview,
   };
 };

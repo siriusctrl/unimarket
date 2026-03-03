@@ -98,6 +98,18 @@ const migrationStatements = [
   )
   `,
   `CREATE INDEX IF NOT EXISTS journal_user_id_idx ON journal(user_id)`,
+  `
+  CREATE TABLE IF NOT EXISTS equity_snapshots (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    balance REAL NOT NULL,
+    market_value REAL NOT NULL,
+    equity REAL NOT NULL,
+    unrealized_pnl REAL NOT NULL,
+    snapshot_at TEXT NOT NULL
+  )
+  `,
+  `CREATE INDEX IF NOT EXISTS equity_snapshots_user_time_idx ON equity_snapshots(user_id, snapshot_at)`,
 ];
 
 export const migrate = async (): Promise<void> => {

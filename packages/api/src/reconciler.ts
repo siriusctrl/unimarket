@@ -54,7 +54,24 @@ export const reconcilePendingOrders = async (registry: MarketRegistry, accountId
       quoteMap.set(symbolKey, quote);
     } catch (error) {
       failedQuoteKeys.add(symbolKey);
-      console.warn(`[reconciler] quote fetch failed for ${symbolKey}; skipping ${groupedOrders.length} orders`, error);
+
+      // Auto-cancel orders for expired/delisted contracts (404 from upstream)
+      const is404 = error instanceof Error && error.message.includes("(404)");
+      if (is404) {
+        for (const order of groupedOrders) {
+          await db
+            .update(orders)
+            .set({
+              status: "cancelled",
+              cancelReasoning: "Auto-cancelled: upstream contract no longer exists (404)",
+            })
+            .where(and(eq(orders.id, order.id), eq(orders.status, "pending")))
+            .run();
+        }
+        console.warn(`[reconciler] auto-cancelled ${groupedOrders.length} orders for expired contract ${symbolKey}`);
+      } else {
+        console.warn(`[reconciler] quote fetch failed for ${symbolKey}; skipping ${groupedOrders.length} orders`, error);
+      }
     }
   }
 

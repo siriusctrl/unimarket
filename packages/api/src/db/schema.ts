@@ -111,3 +111,19 @@ export const journal = sqliteTable(
     userIdx: index("journal_user_id_idx").on(table.userId),
   }),
 );
+
+export const equitySnapshots = sqliteTable(
+  "equity_snapshots",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    balance: real("balance").notNull(),
+    marketValue: real("market_value").notNull(),
+    equity: real("equity").notNull(),
+    unrealizedPnl: real("unrealized_pnl").notNull(),
+    snapshotAt: text("snapshot_at").notNull(),
+  },
+  (table) => ({
+    userTimeIdx: index("equity_snapshots_user_time_idx").on(table.userId, table.snapshotAt),
+  }),
+);
