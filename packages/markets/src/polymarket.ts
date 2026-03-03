@@ -113,6 +113,8 @@ export class PolymarketAdapter implements MarketAdapter {
     const url = new URL("/markets", this.gammaBaseUrl);
     url.searchParams.set("search", query);
     url.searchParams.set("limit", "20");
+    url.searchParams.set("active", "true");
+    url.searchParams.set("closed", "false");
 
     const raw = await fetchJson<unknown>(url.toString());
     const results: Asset[] = [];

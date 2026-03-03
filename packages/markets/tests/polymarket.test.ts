@@ -49,7 +49,10 @@ describe("PolymarketAdapter", () => {
     ]);
     expect(second).toEqual(first);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain("search=cpi");
+    const searchUrl = String(fetchSpy.mock.calls[0]?.[0]);
+    expect(searchUrl).toContain("search=cpi");
+    expect(searchUrl).toContain("active=true");
+    expect(searchUrl).toContain("closed=false");
   });
 
   it("skips malformed search rows and accepts slug/title fallback fields", async () => {
