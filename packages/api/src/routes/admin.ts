@@ -4,7 +4,7 @@ import {
   calculateUnrealizedPnl,
   paginationQuerySchema,
 } from "@unimarket/core";
-import type { MarketRegistry } from "@unimarket/markets";
+import type { MarketRegistry, SymbolResolution } from "@unimarket/markets";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 
@@ -15,8 +15,14 @@ import { jsonError } from "../errors.js";
 import { deserializeTags, getUserAccount, parseJson, parseQuery, withErrorHandling } from "../helpers.js";
 import { makeId, nowIso } from "../utils.js";
 
-const POLYMARKET_CONDITION_ID_PATTERN = /^0x[a-fA-F0-9]{64}$/;
-const POLYMARKET_GAMMA_BATCH_SIZE = 50;
+const EMPTY_RESOLUTION: SymbolResolution = { names: new Map(), outcomes: new Map() };
+
+const resolveSymbols = async (registry: MarketRegistry, marketId: string, symbols: Set<string>): Promise<SymbolResolution> => {
+  if (symbols.size === 0) return EMPTY_RESOLUTION;
+  const adapter = registry.get(marketId);
+  if (!adapter?.resolveSymbolNames) return EMPTY_RESOLUTION;
+  try { return await adapter.resolveSymbolNames(symbols); } catch { return EMPTY_RESOLUTION; }
+};
 
 export const createAdminRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();
@@ -111,8 +117,15 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
         }
       }
 
+      // Resolve Polymarket symbol names and outcomes
+      const pmPositionSymbols = new Set<string>();
+      for (const row of positionRows) {
+        if (row.market === "polymarket") pmPositionSymbols.add(row.symbol);
+      }
+      const positionResolution = await resolveSymbols(registry, "polymarket", pmPositionSymbols);
+
       const positionsByAccount = new Map<string, Array<{
-        market: string; symbol: string; quantity: number; avgCost: number;
+        market: string; symbol: string; symbolName: string | null; side: string | null; quantity: number; avgCost: number;
         currentPrice: number | null; marketValue: number | null;
         unrealizedPnl: number | null; quoteTimestamp: string | null;
       }>>();
@@ -139,7 +152,9 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
 
         if (!positionsByAccount.has(row.accountId)) positionsByAccount.set(row.accountId, []);
         positionsByAccount.get(row.accountId)?.push({
-          market: row.market, symbol: row.symbol, quantity: row.quantity, avgCost: row.avgCost,
+          market: row.market, symbol: row.symbol, symbolName: positionResolution.names.get(row.symbol) ?? null,
+          side: positionResolution.outcomes.get(row.symbol) ?? null,
+          quantity: row.quantity, avgCost: row.avgCost,
           currentPrice, marketValue, unrealizedPnl, quoteTimestamp,
         });
 
@@ -306,101 +321,14 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
         }
       }
 
-      const symbolNameMap = new Map<string, string>();
-      if (pmSymbols.size > 0) {
-        const conditionIds: string[] = [];
-        const tokenIds: string[] = [];
-        for (const symbol of pmSymbols) {
-          if (POLYMARKET_CONDITION_ID_PATTERN.test(symbol)) {
-            conditionIds.push(symbol);
-          } else {
-            tokenIds.push(symbol);
-          }
-        }
-
-        const parseTokenIds = (value: unknown): string[] => {
-          if (Array.isArray(value)) {
-            return value.filter((item): item is string => typeof item === "string" && item.length > 0);
-          }
-
-          if (typeof value === "string" && value.length > 0) {
-            try {
-              const parsed = JSON.parse(value);
-              return Array.isArray(parsed)
-                ? parsed.filter((item): item is string => typeof item === "string" && item.length > 0)
-                : [];
-            } catch {
-              return [];
-            }
-          }
-
-          return [];
-        };
-
-        const appendSymbolNames = (market: Record<string, unknown>) => {
-          const question = typeof market.question === "string" ? market.question : null;
-          const conditionId = typeof market.conditionId === "string" ? market.conditionId : null;
-
-          if (conditionId && question) {
-            symbolNameMap.set(conditionId, question);
-          }
-
-          const tokens = Array.isArray(market.tokens) ? market.tokens : [];
-          for (const token of tokens) {
-            if (typeof token !== "object" || token === null || !question) continue;
-            const tokenRecord = token as Record<string, unknown>;
-            const tokenId = typeof tokenRecord.token_id === "string" ? tokenRecord.token_id : null;
-            const outcome = typeof tokenRecord.outcome === "string" ? tokenRecord.outcome : null;
-            if (!tokenId) continue;
-            symbolNameMap.set(tokenId, outcome ? `${question} — ${outcome}` : question);
-          }
-
-          if (!question) return;
-          for (const tokenId of parseTokenIds(market.clobTokenIds)) {
-            if (!symbolNameMap.has(tokenId)) {
-              symbolNameMap.set(tokenId, question);
-            }
-          }
-        };
-
-        const fetchMarketsBy = async (queryKey: "conditionId" | "clob_token_ids", symbols: string[]) => {
-          for (let i = 0; i < symbols.length; i += POLYMARKET_GAMMA_BATCH_SIZE) {
-            const batch = symbols.slice(i, i + POLYMARKET_GAMMA_BATCH_SIZE);
-            const gammaUrl = new URL("/markets", "https://gamma-api.polymarket.com");
-            gammaUrl.searchParams.set(queryKey, batch.join(","));
-            gammaUrl.searchParams.set("limit", String(Math.max(POLYMARKET_GAMMA_BATCH_SIZE, batch.length)));
-
-            const gammaRes = await fetch(gammaUrl.toString());
-            if (!gammaRes.ok) continue;
-
-            const markets = (await gammaRes.json()) as unknown;
-            if (!Array.isArray(markets)) continue;
-
-            for (const market of markets) {
-              if (typeof market === "object" && market !== null) {
-                appendSymbolNames(market as Record<string, unknown>);
-              }
-            }
-          }
-        };
-
-        try {
-          if (conditionIds.length > 0) {
-            await fetchMarketsBy("conditionId", conditionIds);
-          }
-          if (tokenIds.length > 0) {
-            await fetchMarketsBy("clob_token_ids", tokenIds);
-          }
-        } catch {
-          // Non-critical: skip name resolution on error
-        }
-      }
+      const symbolResolution = await resolveSymbols(registry, "polymarket", pmSymbols);
 
       // Attach resolved names
       for (const event of events) {
         if ("symbol" in event.data && event.data.symbol) {
-          const name = symbolNameMap.get(event.data.symbol);
-          if (name) event.data.symbolName = name;
+          const name = symbolResolution.names.get(event.data.symbol);
+          const outcome = symbolResolution.outcomes.get(event.data.symbol);
+          if (name) event.data.symbolName = outcome ? `${name} — ${outcome}` : name;
         }
       }
 

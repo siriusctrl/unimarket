@@ -1,6 +1,8 @@
 export type PositionView = {
   market: string;
   symbol: string;
+  symbolName?: string | null;
+  side?: string | null;
   quantity: number;
   avgCost: number;
   currentPrice: number | null;
@@ -58,6 +60,8 @@ export type PositionTableRow = {
   accountName: string | null;
   market: string;
   symbol: string;
+  symbolName: string | null;
+  side: string | null;
   quantity: number;
   avgCost: number;
   currentPrice: number | null;
@@ -185,6 +189,8 @@ export const flattenPositions = (overview: OverviewResponse | null): PositionTab
       accountName: agent.accountName,
       market: position.market,
       symbol: position.symbol,
+      symbolName: position.symbolName ?? null,
+      side: position.side ?? null,
       quantity: position.quantity,
       avgCost: position.avgCost,
       currentPrice: position.currentPrice,
@@ -202,6 +208,8 @@ export const flattenAgentPositions = (agent: AgentView): PositionTableRow[] => {
     accountName: agent.accountName,
     market: position.market,
     symbol: position.symbol,
+    symbolName: position.symbolName ?? null,
+    side: position.side ?? null,
     quantity: position.quantity,
     avgCost: position.avgCost,
     currentPrice: position.currentPrice,

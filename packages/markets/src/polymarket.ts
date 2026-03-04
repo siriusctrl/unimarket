@@ -8,10 +8,12 @@ import {
   type Quote,
   type Resolution,
   type SearchOptions,
+  type SymbolResolution,
 } from "./types.js";
 
 type UnknownObject = Record<string, unknown>;
 
+const BATCH_SIZE = 50;
 const QUOTE_TTL_MS = 10_000;
 const ORDERBOOK_TTL_MS = 10_000;
 const SEARCH_TTL_MS = 300_000;
@@ -262,12 +264,12 @@ export class PolymarketAdapter implements MarketAdapter {
         const metadata =
           tokenIds.length > 0 || outcomes.length > 0 || outcomePrices.length > 0
             ? {
-                conditionId,
-                tokenIds,
-                outcomes,
-                outcomePrices,
-                defaultTokenId: tokenIds[0] ?? null,
-              }
+              conditionId,
+              tokenIds,
+              outcomes,
+              outcomePrices,
+              defaultTokenId: tokenIds[0] ?? null,
+            }
             : null;
 
         results.push({
@@ -410,5 +412,79 @@ export class PolymarketAdapter implements MarketAdapter {
     };
     this.cache.set(cacheKey, resolved, RESOLVE_TTL_MS);
     return resolved;
+  }
+
+  async resolveSymbolNames(symbols: Iterable<string>): Promise<SymbolResolution> {
+    const names = new Map<string, string>();
+    const outcomes = new Map<string, string>();
+    const conditionIds: string[] = [];
+    const tokenIds: string[] = [];
+
+    for (const symbol of symbols) {
+      if (CONDITION_ID_PATTERN.test(symbol)) {
+        conditionIds.push(symbol);
+      } else {
+        tokenIds.push(symbol);
+      }
+    }
+
+    if (conditionIds.length === 0 && tokenIds.length === 0) return { names, outcomes };
+
+    const processMarket = (market: UnknownObject) => {
+      const question = typeof market.question === "string" ? market.question : null;
+      const condId = typeof market.conditionId === "string" ? market.conditionId : null;
+
+      if (condId && question) names.set(condId, question);
+
+      const tokens = Array.isArray(market.tokens) ? market.tokens : [];
+      for (const token of tokens) {
+        if (typeof token !== "object" || token === null || !question) continue;
+        const rec = token as UnknownObject;
+        const tid = typeof rec.token_id === "string" ? rec.token_id : null;
+        const out = typeof rec.outcome === "string" ? rec.outcome : null;
+        if (!tid) continue;
+        names.set(tid, question);
+        if (out) outcomes.set(tid, out);
+      }
+
+      // Fallback: match clobTokenIds ↔ outcomes by index
+      if (question) {
+        const tids = parseStringArray(market.clobTokenIds);
+        const outs = parseStringArray(market.outcomes);
+        for (let i = 0; i < tids.length; i++) {
+          if (!names.has(tids[i]!)) names.set(tids[i]!, question);
+          if (!outcomes.has(tids[i]!) && outs[i]) outcomes.set(tids[i]!, outs[i]!);
+        }
+      }
+    };
+
+    const fetchBatch = async (queryKey: string, batch: string[]) => {
+      for (let i = 0; i < batch.length; i += BATCH_SIZE) {
+        const chunk = batch.slice(i, i + BATCH_SIZE);
+        const url = new URL("/markets", this.gammaBaseUrl);
+        url.searchParams.set(queryKey, chunk.join(","));
+        url.searchParams.set("limit", String(Math.max(BATCH_SIZE, chunk.length)));
+
+        let raw: unknown;
+        try {
+          raw = await fetchJson<unknown>(url.toString());
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(raw)) continue;
+        for (const m of raw) {
+          if (typeof m === "object" && m !== null) processMarket(m as UnknownObject);
+        }
+      }
+    };
+
+    try {
+      if (conditionIds.length > 0) await fetchBatch("conditionId", conditionIds);
+      if (tokenIds.length > 0) await fetchBatch("clob_token_ids", tokenIds);
+    } catch {
+      // Non-critical
+    }
+
+    return { names, outcomes };
   }
 }

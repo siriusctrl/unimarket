@@ -51,6 +51,11 @@ export type SearchOptions = {
   offset?: number;
 };
 
+export type SymbolResolution = {
+  names: Map<string, string>;
+  outcomes: Map<string, string>;
+};
+
 export interface MarketAdapter {
   readonly marketId: string;
   readonly displayName: string;
@@ -64,6 +69,7 @@ export interface MarketAdapter {
   getQuote(symbol: string): Promise<Quote>;
   getOrderbook?(symbol: string): Promise<Orderbook>;
   resolve?(symbol: string): Promise<Resolution | null>;
+  resolveSymbolNames?(symbols: Iterable<string>): Promise<SymbolResolution>;
 }
 
 export class MarketAdapterError extends Error {

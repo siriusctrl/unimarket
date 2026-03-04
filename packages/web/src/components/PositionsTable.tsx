@@ -60,9 +60,41 @@ export const PositionsTable = ({
             <Badge variant="secondary" className="w-fit border border-border/50">
               {row.original.market}
             </Badge>
-            <p className="font-mono text-xs text-muted-foreground">{row.original.symbol}</p>
+            {row.original.symbolName ? (
+              <>
+                <p className="text-xs text-foreground/80 truncate max-w-[300px]" title={row.original.symbolName}>
+                  {row.original.symbolName}
+                </p>
+                <p className="font-mono text-[10px] text-muted-foreground/60 truncate max-w-[200px]" title={row.original.symbol}>
+                  {row.original.symbol}
+                </p>
+              </>
+            ) : (
+              <p className="font-mono text-xs text-muted-foreground">{row.original.symbol}</p>
+            )}
           </div>
         ),
+      },
+      {
+        accessorKey: "side",
+        header: () => "Outcome",
+        cell: ({ row }) => {
+          const side = row.original.side;
+          if (!side) return <span className="text-muted-foreground text-xs">—</span>;
+          const isYes = side.toLowerCase() === "yes";
+          return (
+            <Badge
+              variant="outline"
+              className={
+                isYes
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+              }
+            >
+              {side}
+            </Badge>
+          );
+        },
       },
       {
         accessorKey: "quantity",
