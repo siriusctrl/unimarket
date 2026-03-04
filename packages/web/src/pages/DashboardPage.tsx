@@ -8,7 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -45,6 +45,7 @@ export const DashboardPage = () => {
   const [page, setPage] = useState(0);
   const [range, setRange] = useState<string>("1m");
   const [chartMode, setChartMode] = useState<ChartMode>("equity");
+  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
 
   const handleAuthError = () => {
     clearAdminKey();
@@ -121,6 +122,54 @@ export const DashboardPage = () => {
 
     return { chartData: data, agentNames: names, agentColors: colors };
   }, [historyData, chartMode]);
+
+  // Compute Y-axis domain from selected agents with symmetric padding
+  const yDomain = useMemo((): [number, number] | undefined => {
+    if (chartData.length === 0 || selectedAgents.size === 0) return undefined;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of chartData) {
+      for (const name of selectedAgents) {
+        const val = row[name];
+        if (typeof val === "number") {
+          if (val < min) min = val;
+          if (val > max) max = val;
+        }
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
+    const range = max - min;
+    const pad = range > 0 ? range * 0.15 : Math.max(Math.abs(max) * 0.05, 1);
+    return [min - pad, max + pad];
+  }, [chartData, selectedAgents]);
+
+  // Initialize selectedAgents to top 5 when overview first loads
+  useEffect(() => {
+    if (overview && selectedAgents.size === 0) {
+      const top5 = overview.agents.slice(0, 5).map((a) => a.userName);
+      setSelectedAgents(new Set(top5));
+    }
+  }, [overview]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleAgent = (name: string) => {
+    setSelectedAgents((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const selectAllAgents = () => {
+    if (overview) {
+      setSelectedAgents(new Set(overview.agents.map((a) => a.userName)));
+    }
+  };
+
+  const clearAllAgents = () => setSelectedAgents(new Set());
 
   /* ----- filtered + paginated agents ----- */
   const filteredAgents = useMemo(() => {
@@ -272,9 +321,17 @@ export const DashboardPage = () => {
                       interval="preserveStartEnd"
                     />
                     <YAxis
-                      tickFormatter={(v) =>
-                        chartMode === "return" ? `${v}%` : formatCompactNumber(v)
-                      }
+                      domain={yDomain}
+                      padding={{ top: 10, bottom: 10 }}
+                      tickFormatter={(v) => {
+                        if (chartMode === "return") return `${v.toFixed(1)}%`;
+                        // Use compact format only when range is large enough
+                        if (yDomain) {
+                          const range = yDomain[1] - yDomain[0];
+                          if (range < 1000) return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+                        }
+                        return formatCompactNumber(v);
+                      }}
                       tick={tickStyle}
                       axisLine={false}
                       tickLine={false}
@@ -290,19 +347,20 @@ export const DashboardPage = () => {
                       contentStyle={tooltipStyle}
                       labelStyle={{ color: "hsl(var(--muted-foreground))" }}
                     />
-                    <Legend />
-                    {agentNames.map((name) => (
-                      <Line
-                        key={name}
-                        type="monotone"
-                        dataKey={name}
-                        stroke={agentColors[name]}
-                        strokeWidth={2}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                        connectNulls
-                      />
-                    ))}
+                    {agentNames
+                      .filter((name) => selectedAgents.has(name))
+                      .map((name) => (
+                        <Line
+                          key={name}
+                          type="monotone"
+                          dataKey={name}
+                          stroke={agentColors[name]}
+                          strokeWidth={2}
+                          dot={false}
+                          activeDot={{ r: 4 }}
+                          connectNulls
+                        />
+                      ))}
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -312,7 +370,28 @@ export const DashboardPage = () => {
           {/* Agent cards grid with search + pagination */}
           <section className="space-y-3 animate-in fade-in-0 duration-300">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold tracking-tight">All Agents</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold tracking-tight">All Agents</h2>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={selectAllAgents}
+                  >
+                    Select All
+                  </Button>
+                  <span className="text-border">|</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={clearAllAgents}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
               <div className="relative w-64">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -333,71 +412,109 @@ export const DashboardPage = () => {
             ) : (
               <>
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {pagedAgents.map((agent) => (
-                    <Card
-                      key={agent.userId}
-                      className="cursor-pointer bg-card/55 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
-                      onClick={() => navigate(`/agents/${agent.userId}`)}
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-0.5">
-                            <CardTitle className="text-lg">{agent.userName}</CardTitle>
-                            <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
-                          </div>
-                          <Badge variant="outline" className="shrink-0">
-                            {formatNumber(agent.totals.positions)} pos
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Equity</p>
-                            <p className="text-lg font-semibold">{formatCurrency(agent.totals.equity)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Cash</p>
-                            <p className="text-lg font-semibold">{formatCurrency(agent.balance)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between border-t border-border/50 pt-2">
-                          <span className="text-xs text-muted-foreground">Unrealized PnL</span>
-                          <span
-                            className={
-                              agent.totals.unrealizedPnl >= 0
-                                ? "font-medium text-emerald-600 dark:text-emerald-400"
-                                : "font-medium text-rose-600 dark:text-rose-400"
-                            }
-                          >
-                            {formatSignedCurrency(agent.totals.unrealizedPnl)}
-                          </span>
-                        </div>
-
-                        {/* Top positions preview */}
-                        {agent.positions.length > 0 ? (
-                          <div className="space-y-1 border-t border-border/50 pt-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              Holdings
-                            </p>
-                            {agent.positions.slice(0, 3).map((pos) => (
-                              <div key={`${pos.market}:${pos.symbol}`} className="flex items-center justify-between text-xs">
-                                <span className="font-mono text-muted-foreground truncate max-w-[140px]">
-                                  {pos.symbol}
-                                </span>
-                                <span className="font-medium">{formatCurrency(pos.marketValue)}</span>
+                  {pagedAgents.map((agent) => {
+                    const isSelected = selectedAgents.has(agent.userName);
+                    const agentColor = agentColors[agent.userName];
+                    return (
+                      <Card
+                        key={agent.userId}
+                        className={`cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg overflow-hidden ${isSelected
+                          ? "bg-card/55 border-primary/30"
+                          : "bg-card/30 border-border/40 opacity-60"
+                          }`}
+                        onClick={(e) => {
+                          if (e.ctrlKey || e.metaKey) {
+                            navigate(`/agents/${agent.userId}`);
+                          } else {
+                            toggleAgent(agent.userName);
+                          }
+                        }}
+                      >
+                        <div className="flex">
+                          {/* Color bar */}
+                          <div
+                            className="w-1 shrink-0 transition-opacity duration-200"
+                            style={{
+                              backgroundColor: agentColor ?? "hsl(var(--border))",
+                              opacity: isSelected ? 1 : 0.3,
+                            }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <CardHeader className="pb-2">
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-0.5">
+                                  <CardTitle className="text-lg">{agent.userName}</CardTitle>
+                                  <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="shrink-0">
+                                    {formatNumber(agent.totals.positions)} pos
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/agents/${agent.userId}`);
+                                    }}
+                                  >
+                                    Detail →
+                                  </Button>
+                                </div>
                               </div>
-                            ))}
-                            {agent.positions.length > 3 ? (
-                              <p className="text-[10px] text-muted-foreground">
-                                +{agent.positions.length - 3} more
-                              </p>
-                            ) : null}
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Equity</p>
+                                  <p className="text-lg font-semibold">{formatCurrency(agent.totals.equity)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Cash</p>
+                                  <p className="text-lg font-semibold">{formatCurrency(agent.balance)}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                                <span className="text-xs text-muted-foreground">Unrealized PnL</span>
+                                <span
+                                  className={
+                                    agent.totals.unrealizedPnl >= 0
+                                      ? "font-medium text-emerald-600 dark:text-emerald-400"
+                                      : "font-medium text-rose-600 dark:text-rose-400"
+                                  }
+                                >
+                                  {formatSignedCurrency(agent.totals.unrealizedPnl)}
+                                </span>
+                              </div>
+
+                              {/* Top positions preview */}
+                              {agent.positions.length > 0 ? (
+                                <div className="space-y-1 border-t border-border/50 pt-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                    Holdings
+                                  </p>
+                                  {agent.positions.slice(0, 3).map((pos) => (
+                                    <div key={`${pos.market}:${pos.symbol}`} className="flex items-center justify-between text-xs">
+                                      <span className="font-mono text-muted-foreground truncate max-w-[140px]">
+                                        {pos.symbolName ?? pos.symbol}
+                                      </span>
+                                      <span className="font-medium">{formatCurrency(pos.marketValue)}</span>
+                                    </div>
+                                  ))}
+                                  {agent.positions.length > 3 ? (
+                                    <p className="text-[10px] text-muted-foreground">
+                                      +{agent.positions.length - 3} more
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </CardContent>
                           </div>
-                        ) : null}
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </div>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 {/* Pagination */}
