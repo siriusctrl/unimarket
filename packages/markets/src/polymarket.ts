@@ -18,6 +18,7 @@ const QUOTE_TTL_MS = 10_000;
 const ORDERBOOK_TTL_MS = 10_000;
 const SEARCH_TTL_MS = 300_000;
 const RESOLVE_TTL_MS = 60_000;
+const RESOLVE_NAMES_CONCURRENCY = 8;
 
 const DEFAULT_GAMMA_BASE_URL = "https://gamma-api.polymarket.com";
 const DEFAULT_CLOB_BASE_URL = "https://clob.polymarket.com";
@@ -461,19 +462,26 @@ export class PolymarketAdapter implements MarketAdapter {
     const fetchBatch = async (queryKey: string, batch: string[]) => {
       for (let i = 0; i < batch.length; i += BATCH_SIZE) {
         const chunk = batch.slice(i, i + BATCH_SIZE);
-        const url = new URL("/markets", this.gammaBaseUrl);
-        url.searchParams.set(queryKey, chunk.join(","));
-        url.searchParams.set("limit", String(Math.max(BATCH_SIZE, chunk.length)));
+        for (let j = 0; j < chunk.length; j += RESOLVE_NAMES_CONCURRENCY) {
+          const window = chunk.slice(j, j + RESOLVE_NAMES_CONCURRENCY);
+          const settled = await Promise.allSettled(
+            window.map(async (symbol) => {
+              const url = new URL("/markets", this.gammaBaseUrl);
+              // Gamma's `clob_token_ids` validation is strict for multi-value payloads.
+              // Query one symbol at a time, but do it with bounded concurrency.
+              url.searchParams.set(queryKey, symbol);
+              url.searchParams.set("limit", "1");
+              return fetchJson<unknown>(url.toString());
+            }),
+          );
 
-        let raw: unknown;
-        try {
-          raw = await fetchJson<unknown>(url.toString());
-        } catch {
-          continue;
-        }
-        if (!Array.isArray(raw)) continue;
-        for (const m of raw) {
-          if (typeof m === "object" && m !== null) processMarket(m as UnknownObject);
+          for (const result of settled) {
+            if (result.status !== "fulfilled") continue;
+            if (!Array.isArray(result.value)) continue;
+            for (const market of result.value) {
+              if (typeof market === "object" && market !== null) processMarket(market as UnknownObject);
+            }
+          }
         }
       }
     };

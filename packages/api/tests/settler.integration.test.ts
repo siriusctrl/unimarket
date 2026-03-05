@@ -83,6 +83,7 @@ const resetDatabase = async (): Promise<void> => {
   await sqlite.execute("DELETE FROM orders");
   await sqlite.execute("DELETE FROM positions");
   await sqlite.execute("DELETE FROM journal");
+  await sqlite.execute("DELETE FROM symbol_metadata_cache");
   await sqlite.execute("DELETE FROM api_keys");
   await sqlite.execute("DELETE FROM accounts");
   await sqlite.execute("DELETE FROM users");

@@ -112,6 +112,19 @@ const migrationStatements = [
   `,
   `CREATE INDEX IF NOT EXISTS equity_snapshots_user_time_idx ON equity_snapshots(user_id, snapshot_at)`,
   `
+  CREATE TABLE IF NOT EXISTS symbol_metadata_cache (
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    symbol_name TEXT,
+    outcome TEXT,
+    fetched_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_error TEXT
+  )
+  `,
+  `CREATE UNIQUE INDEX IF NOT EXISTS symbol_metadata_cache_market_symbol_uq ON symbol_metadata_cache(market, symbol)`,
+  `CREATE INDEX IF NOT EXISTS symbol_metadata_cache_market_expires_idx ON symbol_metadata_cache(market, expires_at)`,
+  `
   CREATE TABLE IF NOT EXISTS idempotency_keys (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

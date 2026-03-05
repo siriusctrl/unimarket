@@ -129,6 +129,23 @@ export const equitySnapshots = sqliteTable(
   }),
 );
 
+export const symbolMetadataCache = sqliteTable(
+  "symbol_metadata_cache",
+  {
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    symbolName: text("symbol_name"),
+    outcome: text("outcome"),
+    fetchedAt: text("fetched_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    lastError: text("last_error"),
+  },
+  (table) => ({
+    marketSymbolUnique: uniqueIndex("symbol_metadata_cache_market_symbol_uq").on(table.market, table.symbol),
+    marketExpiresIdx: index("symbol_metadata_cache_market_expires_idx").on(table.market, table.expiresAt),
+  }),
+);
+
 export const idempotencyKeys = sqliteTable(
   "idempotency_keys",
   {

@@ -77,18 +77,22 @@ export const PositionsTable = ({
       },
       {
         accessorKey: "side",
-        header: () => "Outcome",
+        header: () => "Outcome (Yes/No)",
         cell: ({ row }) => {
           const side = row.original.side;
-          if (!side) return <span className="text-muted-foreground text-xs">—</span>;
-          const isYes = side.toLowerCase() === "yes";
+          if (!side) return <span className="text-muted-foreground text-xs">Unknown</span>;
+          const normalizedSide = side.toLowerCase();
+          const isYes = normalizedSide === "yes";
+          const isNo = normalizedSide === "no";
           return (
             <Badge
               variant="outline"
               className={
                 isYes
                   ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                  : isNo
+                    ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                    : "border-border/60 bg-muted/40 text-muted-foreground"
               }
             >
               {side}

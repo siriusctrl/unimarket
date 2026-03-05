@@ -23,9 +23,9 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 │  ┌────────────────────────────────────────────┐  │
 │  │           Hono Server (:3100)              │  │
 │  │                                            │  │
-│  │  /api/*  → REST API                        │  │
-│  │  /*      → Static files (Vite build)       │  │
+│  │  /api/*      → REST API                    │  │
 │  │  /api/events → SSE event stream            │  │
+│  │  /* (opt-in) → Static files (Vite build)   │  │
 │  └──────────────────┬─────────────────────────┘  │
 │                     │                            │
 │  ┌──────────────────▼─────────────────────────┐  │
@@ -44,7 +44,8 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 ```
 
 **Key design decisions:**
-- Single process: Hono serves both API and frontend static files
+- API-first by default: Hono serves API/SSE on `:3100`, frontend runs on Vite dev server (`:5173`)
+- Optional single-process static hosting for built frontend via `SERVE_WEB_DIST=true`
 - `core` is pure logic with no I/O — Zod schemas shared across the entire stack
 - Market adapters implement a unified interface, registered at startup
 - Runtime discovery: `GET /api/markets` returns available markets + capabilities
@@ -152,6 +153,7 @@ This installs local tooling under `.agents/` (gitignored in this repo).
 | `ADMIN_API_KEY` | **Yes** | — | Admin API key for dashboard login and admin endpoints |
 | `DB_URL` / `DB_PATH` | No | `file:unimarket.sqlite` | SQLite database path |
 | `RECONCILE_INTERVAL_MS` | No | `1000` | Pending order reconciliation interval (ms) |
+| `SERVE_WEB_DIST` | No | `false` | Serve built frontend from API server on `:3100` when set to `true` |
 
 ### Running the Server
 
@@ -164,8 +166,11 @@ pnpm dev
 ADMIN_API_KEY=your-secret-key pnpm dev
 
 # Individual services
-pnpm dev:api   # API only (:3100)
+pnpm dev:api   # API only (:3100, no dashboard static by default)
 pnpm dev:web   # Dashboard only (:5173)
+
+# Optional: serve built dashboard from API server (:3100)
+SERVE_WEB_DIST=true pnpm dev:api
 ```
 
 ### Using the Admin Dashboard

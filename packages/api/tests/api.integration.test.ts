@@ -76,6 +76,19 @@ const polymarketAdapter: MarketAdapter = {
     settlementPrice: null,
     timestamp: new Date().toISOString(),
   }),
+  resolveSymbolNames: async (symbols) => {
+    const names = new Map<string, string>();
+    const outcomes = new Map<string, string>();
+
+    for (const symbol of symbols) {
+      names.set(symbol, `Resolved ${symbol}`);
+      const lowered = symbol.toLowerCase();
+      if (lowered.includes("yes")) outcomes.set(symbol, "Yes");
+      if (lowered.includes("no")) outcomes.set(symbol, "No");
+    }
+
+    return { names, outcomes };
+  },
 };
 
 const quoteOnlyAdapter: MarketAdapter = {
@@ -101,6 +114,7 @@ const resetDatabase = async (): Promise<void> => {
   await sqlite.execute("DELETE FROM positions");
   await sqlite.execute("DELETE FROM journal");
   await sqlite.execute("DELETE FROM equity_snapshots");
+  await sqlite.execute("DELETE FROM symbol_metadata_cache");
   await sqlite.execute("DELETE FROM idempotency_keys");
   await sqlite.execute("DELETE FROM api_keys");
   await sqlite.execute("DELETE FROM accounts");
@@ -200,6 +214,14 @@ afterAll(async () => {
 });
 
 describe("api integration", () => {
+  it("does not expose dashboard routes from the API server by default", async () => {
+    const rootResponse = await app.request("/");
+    expect(rootResponse.status).toBe(404);
+
+    const dashboardResponse = await app.request("/dashboard");
+    expect(dashboardResponse.status).toBe(404);
+  });
+
   it("serves meta endpoints and protects authenticated routes", async () => {
     const healthResponse = await app.request("/health");
     expect(healthResponse.status).toBe(200);
@@ -1679,6 +1701,67 @@ describe("api integration", () => {
       return typed.name === "positions_unique_idx";
     });
     expect(hasUniqueIndex).toBe(true);
+  });
+
+  it("caches resolved symbol metadata for admin overview and timeline responses", async () => {
+    const user = await registerUser("admin-symbol-cache-user");
+    quoteBySymbol["0x-meta-no"] = { price: 0.44, bid: 0.43, ask: 0.44 };
+
+    const orderResponse = await authedJson("/api/orders", user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        market: "polymarket",
+        symbol: "0x-meta-no",
+        side: "buy",
+        type: "market",
+        quantity: 2,
+        reasoning: "seed symbol metadata cache",
+      }),
+    });
+    expect(orderResponse.status).toBe(201);
+
+    const resolveSpy = vi.spyOn(polymarketAdapter, "resolveSymbolNames");
+
+    const firstOverviewResponse = await authedJson("/api/admin/overview", "admin_test_key");
+    expect(firstOverviewResponse.status).toBe(200);
+    const firstOverviewPayload = await firstOverviewResponse.json();
+
+    const firstAgent = firstOverviewPayload.agents.find((agent: { userId: string }) => agent.userId === user.userId);
+    const firstPosition = firstAgent?.positions?.find((position: { symbol: string }) => position.symbol === "0x-meta-no");
+    expect(firstPosition?.symbolName).toBe("Resolved 0x-meta-no");
+    expect(firstPosition?.side).toBe("No");
+    expect(resolveSpy).toHaveBeenCalled();
+
+    const cachedRows = await db
+      .select()
+      .from(tables.symbolMetadataCache)
+      .where(eq(tables.symbolMetadataCache.symbol, "0x-meta-no"))
+      .all();
+    expect(cachedRows).toHaveLength(1);
+    expect(cachedRows[0]?.symbolName).toBe("Resolved 0x-meta-no");
+    expect(cachedRows[0]?.outcome).toBe("No");
+
+    resolveSpy.mockImplementation(async () => {
+      throw new Error("symbol resolver unavailable");
+    });
+
+    const secondOverviewResponse = await authedJson("/api/admin/overview", "admin_test_key");
+    expect(secondOverviewResponse.status).toBe(200);
+    const secondOverviewPayload = await secondOverviewResponse.json();
+    const secondAgent = secondOverviewPayload.agents.find((agent: { userId: string }) => agent.userId === user.userId);
+    const secondPosition = secondAgent?.positions?.find((position: { symbol: string }) => position.symbol === "0x-meta-no");
+    expect(secondPosition?.symbolName).toBe("Resolved 0x-meta-no");
+    expect(secondPosition?.side).toBe("No");
+
+    const timelineResponse = await authedJson(`/api/admin/users/${user.userId}/timeline?limit=20&offset=0`, "admin_test_key");
+    expect(timelineResponse.status).toBe(200);
+    const timelinePayload = await timelineResponse.json();
+    const orderEvent = timelinePayload.events.find(
+      (event: { type: string; data?: { symbol?: string; symbolName?: string | null } }) =>
+        event.type === "order" && event.data?.symbol === "0x-meta-no",
+    );
+    expect(orderEvent?.data?.symbolName).toBe("Resolved 0x-meta-no — No");
   });
 
   it("covers admin fund endpoint invalid-json and account-not-found branches", async () => {

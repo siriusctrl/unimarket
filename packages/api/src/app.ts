@@ -17,6 +17,7 @@ import { jsonError } from "./errors.js";
 export type CreateAppOptions = {
   registry?: MarketRegistry;
   webDistPath?: string;
+  serveWeb?: boolean;
 };
 
 export const createDefaultRegistry = (): MarketRegistry => {
@@ -57,11 +58,13 @@ export const createApp = (options: CreateAppOptions = {}) => {
   app.route("/api/admin", createAdminRoutes(registry));
   app.all("/api/*", (c) => jsonError(c, 404, "NOT_FOUND", `API endpoint not found: ${c.req.path}`));
 
-  // Serve Vite build output as static files
-  const webDistRoot = options.webDistPath ?? "../web/dist";
-  app.use("/*", serveStatic({ root: webDistRoot }));
-  // SPA fallback: serve index.html for non-API, non-file routes
-  app.get("/*", serveStatic({ root: webDistRoot, path: "index.html" }));
+  if (options.serveWeb) {
+    // Serve Vite build output as static files
+    const webDistRoot = options.webDistPath ?? "../web/dist";
+    app.use("/*", serveStatic({ root: webDistRoot }));
+    // SPA fallback: serve index.html for non-API, non-file routes
+    app.get("/*", serveStatic({ root: webDistRoot, path: "index.html" }));
+  }
 
   return app;
 };

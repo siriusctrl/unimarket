@@ -4,7 +4,7 @@ import {
   calculateUnrealizedPnl,
   paginationQuerySchema,
 } from "@unimarket/core";
-import type { MarketRegistry, SymbolResolution } from "@unimarket/markets";
+import type { MarketRegistry } from "@unimarket/markets";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 
@@ -13,16 +13,8 @@ import { db } from "../db/client.js";
 import { accounts, equitySnapshots, journal, orders, positions, users } from "../db/schema.js";
 import { jsonError } from "../errors.js";
 import { deserializeTags, getUserAccount, parseJson, parseQuery, withErrorHandling } from "../helpers.js";
+import { resolveSymbolsWithCache } from "../symbol-metadata.js";
 import { makeId, nowIso } from "../utils.js";
-
-const EMPTY_RESOLUTION: SymbolResolution = { names: new Map(), outcomes: new Map() };
-
-const resolveSymbols = async (registry: MarketRegistry, marketId: string, symbols: Set<string>): Promise<SymbolResolution> => {
-  if (symbols.size === 0) return EMPTY_RESOLUTION;
-  const adapter = registry.get(marketId);
-  if (!adapter?.resolveSymbolNames) return EMPTY_RESOLUTION;
-  try { return await adapter.resolveSymbolNames(symbols); } catch { return EMPTY_RESOLUTION; }
-};
 
 export const createAdminRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();
@@ -122,7 +114,7 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
       for (const row of positionRows) {
         if (row.market === "polymarket") pmPositionSymbols.add(row.symbol);
       }
-      const positionResolution = await resolveSymbols(registry, "polymarket", pmPositionSymbols);
+      const positionResolution = await resolveSymbolsWithCache(registry, "polymarket", pmPositionSymbols);
 
       const positionsByAccount = new Map<string, Array<{
         market: string; symbol: string; symbolName: string | null; side: string | null; quantity: number; avgCost: number;
@@ -321,7 +313,7 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
         }
       }
 
-      const symbolResolution = await resolveSymbols(registry, "polymarket", pmSymbols);
+      const symbolResolution = await resolveSymbolsWithCache(registry, "polymarket", pmSymbols);
 
       // Attach resolved names
       for (const event of events) {

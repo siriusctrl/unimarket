@@ -430,4 +430,54 @@ describe("PolymarketAdapter", () => {
       code: "SYMBOL_NOT_FOUND",
     });
   });
+
+  it("resolves names/outcomes for multiple token ids without combined clob_token_ids queries", async () => {
+    const tokenA = "111111";
+    const tokenB = "222222";
+    const conditionA = `0x${"3".repeat(64)}`;
+    const conditionB = `0x${"4".repeat(64)}`;
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`clob_token_ids=${tokenA}%2C${tokenB}`) || url.includes(`clob_token_ids=${tokenA},${tokenB}`)) {
+        return jsonResponse({ type: "validation error", error: "invalid clob token ids" }, 400);
+      }
+      if (url.includes(`clob_token_ids=${tokenA}`)) {
+        return jsonResponse([
+          {
+            conditionId: conditionA,
+            question: "Will token A resolve?",
+            clobTokenIds: JSON.stringify([tokenA]),
+            outcomes: JSON.stringify(["Yes"]),
+          },
+        ]);
+      }
+      if (url.includes(`clob_token_ids=${tokenB}`)) {
+        return jsonResponse([
+          {
+            conditionId: conditionB,
+            question: "Will token B resolve?",
+            clobTokenIds: JSON.stringify([tokenB]),
+            outcomes: JSON.stringify(["No"]),
+          },
+        ]);
+      }
+      throw new Error(`Unexpected fetch url: ${url}`);
+    });
+
+    const adapter = makeAdapter();
+    const resolved = await adapter.resolveSymbolNames([tokenA, tokenB]);
+
+    expect(resolved.names.get(tokenA)).toBe("Will token A resolve?");
+    expect(resolved.outcomes.get(tokenA)).toBe("Yes");
+    expect(resolved.names.get(tokenB)).toBe("Will token B resolve?");
+    expect(resolved.outcomes.get(tokenB)).toBe("No");
+
+    const calledUrls = fetchSpy.mock.calls.map(([url]) => String(url));
+    expect(calledUrls.some((url) => url.includes(`clob_token_ids=${tokenA}`))).toBe(true);
+    expect(calledUrls.some((url) => url.includes(`clob_token_ids=${tokenB}`))).toBe(true);
+    expect(
+      calledUrls.some((url) => url.includes(`clob_token_ids=${tokenA}%2C${tokenB}`) || url.includes(`clob_token_ids=${tokenA},${tokenB}`)),
+    ).toBe(false);
+  });
 });
