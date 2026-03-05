@@ -29,6 +29,9 @@ For safe retries, these write endpoints support `Idempotency-Key`:
 - `DELETE /api/orders/:id`
 - `POST /api/journal`
 
+Order `quantity` is decimal-capable at schema validation. Final acceptance is enforced per market/symbol using:
+- `GET /api/markets/:market/trading-constraints?symbol=...`
+
 ## Auth
 
 ### Register
@@ -191,6 +194,8 @@ Idempotency-Key: <optional-unique-key>
 
 For limit orders, add `"limitPrice": 0.40`. Status will be `"pending"` until filled or cancelled.
 `accountId` is optional. If provided, it must match the caller's own account.
+`quantity` can be decimal, but it must satisfy the selected symbol's constraints (`minQuantity`, `quantityStep`, `supportsFractional`).
+For perpetual markets, `leverage` must also satisfy symbol `maxLeverage`.
 
 ### List Orders
 ```
@@ -340,6 +345,25 @@ GET /api/markets/polymarket/search?limit=20&offset=0
 For Polymarket, `search` returns condition IDs that can be used directly in `quote`, `orderbook`, and `orders`.
 If you need explicit YES/NO token selection, use `results[].metadata.tokenIds` and `results[].metadata.outcomes`.
 
+### Get Trading Constraints
+```
+GET /api/markets/hyperliquid/trading-constraints?symbol=btc-perp
+
+→ 200
+{
+  "symbol": "BTC",
+  "constraints": {
+    "minQuantity": 0.00001,
+    "quantityStep": 0.00001,
+    "supportsFractional": true,
+    "maxLeverage": 50
+  }
+}
+```
+
+Use this endpoint before placing orders to validate quantity/leverage inputs.
+If `supportsFractional` is `false`, quantity must be an integer (for example, Polymarket returns step `1`).
+
 ### Get Quote
 ```
 GET /api/markets/polymarket/quote?symbol=0x1234...abcd
@@ -400,6 +424,38 @@ GET /api/markets/polymarket/orderbooks?symbols=0x1234...abcd,0x5678...efgh
 
 `symbols` is a comma-separated list (up to 50 unique symbols).
 
+### Get Funding Rate
+```
+GET /api/markets/<market>/funding?symbol=<symbol>
+
+→ 200
+{
+  "symbol": "BTC",
+  "rate": 0.0002,
+  "nextFundingAt": "2026-03-01T01:00:00.000Z",
+  "timestamp": "2026-03-01T00:32:10.000Z"
+}
+```
+
+Only available on markets where `capabilities` includes `funding`.
+
+### Get Funding Rates (Batch)
+```
+GET /api/markets/<market>/fundings?symbols=btc,eth,missing
+
+→ 200
+{
+  "fundings": [
+    { "symbol": "BTC", "rate": 0.0002, "nextFundingAt": "2026-03-01T01:00:00.000Z", "timestamp": "2026-03-01T00:32:10.000Z" }
+  ],
+  "errors": [
+    { "symbol": "missing", "error": { "code": "SYMBOL_NOT_FOUND", "message": "..." } }
+  ]
+}
+```
+
+`symbols` is a comma-separated list (up to 50 unique symbols).
+
 ### Check Resolution
 ```
 GET /api/markets/polymarket/resolve?symbol=0x1234...abcd
@@ -438,6 +494,7 @@ data: {"type":"system.ready","data":{"version":"2.0.0","connectedAt":"2026-03-02
 data: {"type":"order.filled","userId":"usr_xxx","accountId":"acc_xxx","orderId":"ord_xxx","data":{...}}
 data: {"type":"order.cancelled","userId":"usr_xxx","accountId":"acc_xxx","orderId":"ord_xxx","data":{...}}
 data: {"type":"position.settled","userId":"usr_xxx","accountId":"acc_xxx","data":{...}}
+data: {"type":"funding.applied","userId":"usr_xxx","accountId":"acc_xxx","data":{...}}
 ```
 
 Event types:
@@ -445,6 +502,7 @@ Event types:
 - `order.filled` — emitted when an order executes
 - `order.cancelled` — emitted when a pending order is cancelled
 - `position.settled` — emitted when a position settles
+- `funding.applied` — emitted when periodic funding is applied to an open position
 
 ## Admin Endpoints
 

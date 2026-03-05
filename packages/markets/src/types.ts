@@ -1,4 +1,4 @@
-export type MarketCapability = "search" | "quote" | "orderbook" | "resolve";
+export type MarketCapability = "search" | "quote" | "orderbook" | "resolve" | "funding";
 
 export type Asset = {
   symbol: string;
@@ -37,6 +37,13 @@ export type Resolution = {
   timestamp: string;
 };
 
+export type FundingRate = {
+  symbol: string;
+  rate: number;
+  nextFundingAt: string;
+  timestamp: string;
+};
+
 export type MarketDescriptor = {
   id: string;
   name: string;
@@ -49,6 +56,13 @@ export type MarketDescriptor = {
 export type SearchOptions = {
   limit?: number;
   offset?: number;
+};
+
+export type TradingConstraints = {
+  minQuantity: number;
+  quantityStep: number;
+  supportsFractional: boolean;
+  maxLeverage?: number | null;
 };
 
 export type SymbolResolution = {
@@ -70,6 +84,8 @@ export interface MarketAdapter {
   getOrderbook?(symbol: string): Promise<Orderbook>;
   resolve?(symbol: string): Promise<Resolution | null>;
   resolveSymbolNames?(symbols: Iterable<string>): Promise<SymbolResolution>;
+  getFundingRate?(symbol: string): Promise<FundingRate>;
+  getTradingConstraints?(symbol: string): Promise<TradingConstraints>;
 }
 
 export class MarketAdapterError extends Error {

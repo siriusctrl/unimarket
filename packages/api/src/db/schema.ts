@@ -16,10 +16,10 @@ export const apiKeys = sqliteTable(
     createdAt: text("created_at").notNull(),
     revokedAt: text("revoked_at"),
   },
-  (table) => ({
-    keyHashUnique: uniqueIndex("api_keys_key_hash_uq").on(table.keyHash),
-    userIdx: index("api_keys_user_id_idx").on(table.userId),
-  }),
+  (table) => [
+    uniqueIndex("api_keys_key_hash_uq").on(table.keyHash),
+    index("api_keys_user_id_idx").on(table.userId),
+  ],
 );
 
 export const accounts = sqliteTable(
@@ -32,10 +32,10 @@ export const accounts = sqliteTable(
     reasoning: text("reasoning").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    userUnique: uniqueIndex("accounts_user_id_uq").on(table.userId),
-    userIdx: index("accounts_user_id_idx").on(table.userId),
-  }),
+  (table) => [
+    uniqueIndex("accounts_user_id_uq").on(table.userId),
+    index("accounts_user_id_idx").on(table.userId),
+  ],
 );
 
 export const orders = sqliteTable(
@@ -47,7 +47,7 @@ export const orders = sqliteTable(
     symbol: text("symbol").notNull(),
     side: text("side").notNull(),
     type: text("type").notNull(),
-    quantity: integer("quantity").notNull(),
+    quantity: real("quantity").notNull(),
     limitPrice: real("limit_price"),
     status: text("status").notNull(),
     filledPrice: real("filled_price"),
@@ -57,11 +57,24 @@ export const orders = sqliteTable(
     filledAt: text("filled_at"),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    accountIdx: index("orders_account_id_idx").on(table.accountId),
-    marketIdx: index("orders_market_idx").on(table.market),
-    statusIdx: index("orders_status_idx").on(table.status),
-  }),
+  (table) => [
+    index("orders_account_id_idx").on(table.accountId),
+    index("orders_market_idx").on(table.market),
+    index("orders_status_idx").on(table.status),
+  ],
+);
+
+export const orderExecutionParams = sqliteTable(
+  "order_execution_params",
+  {
+    orderId: text("order_id").primaryKey(),
+    leverage: real("leverage").notNull(),
+    reduceOnly: integer("reduce_only", { mode: "boolean" }).notNull(),
+    takerFeeRate: real("taker_fee_rate").notNull().default(0),
+  },
+  (table) => [
+    index("order_execution_params_leverage_idx").on(table.leverage),
+  ],
 );
 
 export const positions = sqliteTable(
@@ -71,13 +84,32 @@ export const positions = sqliteTable(
     accountId: text("account_id").notNull(),
     market: text("market").notNull(),
     symbol: text("symbol").notNull(),
-    quantity: integer("quantity").notNull(),
+    quantity: real("quantity").notNull(),
     avgCost: real("avg_cost").notNull(),
   },
-  (table) => ({
-    uniquePosition: uniqueIndex("positions_unique_idx").on(table.accountId, table.market, table.symbol),
-    accountIdx: index("positions_account_id_idx").on(table.accountId),
-  }),
+  (table) => [
+    uniqueIndex("positions_unique_idx").on(table.accountId, table.market, table.symbol),
+    index("positions_account_id_idx").on(table.accountId),
+  ],
+);
+
+export const perpPositionState = sqliteTable(
+  "perp_position_state",
+  {
+    positionId: text("position_id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    leverage: real("leverage").notNull(),
+    margin: real("margin").notNull(),
+    maintenanceMarginRatio: real("maintenance_margin_ratio").notNull(),
+    liquidationPrice: real("liquidation_price"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("perp_position_state_account_id_idx").on(table.accountId),
+    index("perp_position_state_market_symbol_idx").on(table.market, table.symbol),
+  ],
 );
 
 export const trades = sqliteTable(
@@ -89,14 +121,15 @@ export const trades = sqliteTable(
     market: text("market").notNull(),
     symbol: text("symbol").notNull(),
     side: text("side").notNull(),
-    quantity: integer("quantity").notNull(),
+    quantity: real("quantity").notNull(),
     price: real("price").notNull(),
+    fee: real("fee").notNull().default(0),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    accountIdx: index("trades_account_id_idx").on(table.accountId),
-    orderIdx: index("trades_order_id_idx").on(table.orderId),
-  }),
+  (table) => [
+    index("trades_account_id_idx").on(table.accountId),
+    index("trades_order_id_idx").on(table.orderId),
+  ],
 );
 
 export const journal = sqliteTable(
@@ -108,9 +141,9 @@ export const journal = sqliteTable(
     tags: text("tags").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    userIdx: index("journal_user_id_idx").on(table.userId),
-  }),
+  (table) => [
+    index("journal_user_id_idx").on(table.userId),
+  ],
 );
 
 export const equitySnapshots = sqliteTable(
@@ -124,9 +157,9 @@ export const equitySnapshots = sqliteTable(
     unrealizedPnl: real("unrealized_pnl").notNull(),
     snapshotAt: text("snapshot_at").notNull(),
   },
-  (table) => ({
-    userTimeIdx: index("equity_snapshots_user_time_idx").on(table.userId, table.snapshotAt),
-  }),
+  (table) => [
+    index("equity_snapshots_user_time_idx").on(table.userId, table.snapshotAt),
+  ],
 );
 
 export const symbolMetadataCache = sqliteTable(
@@ -140,10 +173,10 @@ export const symbolMetadataCache = sqliteTable(
     expiresAt: text("expires_at").notNull(),
     lastError: text("last_error"),
   },
-  (table) => ({
-    marketSymbolUnique: uniqueIndex("symbol_metadata_cache_market_symbol_uq").on(table.market, table.symbol),
-    marketExpiresIdx: index("symbol_metadata_cache_market_expires_idx").on(table.market, table.expiresAt),
-  }),
+  (table) => [
+    uniqueIndex("symbol_metadata_cache_market_symbol_uq").on(table.market, table.symbol),
+    index("symbol_metadata_cache_market_expires_idx").on(table.market, table.expiresAt),
+  ],
 );
 
 export const idempotencyKeys = sqliteTable(
@@ -159,13 +192,31 @@ export const idempotencyKeys = sqliteTable(
     responseBody: text("response_body").notNull(),
     createdAt: text("created_at").notNull(),
   },
-  (table) => ({
-    uniqueScope: uniqueIndex("idempotency_keys_unique_scope_uq").on(
+  (table) => [
+    uniqueIndex("idempotency_keys_unique_scope_uq").on(
       table.userId,
       table.key,
       table.method,
       table.path,
     ),
-    createdIdx: index("idempotency_keys_created_at_idx").on(table.createdAt),
-  }),
+    index("idempotency_keys_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const fundingPayments = sqliteTable(
+  "funding_payments",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    quantity: real("quantity").notNull(),
+    fundingRate: real("funding_rate").notNull(),
+    payment: real("payment").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("funding_payments_account_id_idx").on(table.accountId),
+    index("funding_payments_market_symbol_idx").on(table.market, table.symbol),
+  ],
 );

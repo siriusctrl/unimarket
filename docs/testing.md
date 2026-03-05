@@ -21,7 +21,7 @@ This is the agent-side method used to validate the full API surface without read
 
 Coverage targets:
 - Auth: register, create/revoke key, unauthorized behavior
-- Market data: search/quote/orderbook/resolve for every discovered market capability
+- Market data: search/quote/orderbook/funding/resolve for every discovered market capability
 - Trading: market order fill, pending limit order, cancel, optional manual reconcile check
 - Account data: account, positions, portfolio, timeline, journal
 - Realtime: SSE `system.ready` and trading events
@@ -99,6 +99,9 @@ while read -r MARKET_ID; do
   fi
   if grep -qx "orderbook" <<<"$CAPS"; then
     auth_get "/api/markets/$MARKET_ID/orderbook?symbol=$SYMBOL" >/dev/null
+  fi
+  if grep -qx "funding" <<<"$CAPS"; then
+    auth_get "/api/markets/$MARKET_ID/funding?symbol=$SYMBOL" >/dev/null
   fi
   if grep -qx "resolve" <<<"$CAPS"; then
     auth_get "/api/markets/$MARKET_ID/resolve?symbol=$SYMBOL" >/dev/null

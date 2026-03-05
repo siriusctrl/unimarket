@@ -23,4 +23,15 @@ describe("TtlCache", () => {
     const cache = new TtlCache();
     expect(cache.get("missing")).toBeUndefined();
   });
+
+  it("evicts oldest entries when max size is reached", () => {
+    const cache = new TtlCache(2);
+    cache.set("a", 1, 10_000);
+    cache.set("b", 2, 10_000);
+    cache.set("c", 3, 10_000);
+
+    expect(cache.get("a")).toBeUndefined();
+    expect(cache.get("b")).toBe(2);
+    expect(cache.get("c")).toBe(3);
+  });
 });

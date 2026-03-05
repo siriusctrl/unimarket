@@ -92,11 +92,13 @@ interface MarketAdapter {
   readonly description: string
   readonly symbolFormat: string
   readonly priceRange: [number, number] | null
-  readonly capabilities: string[]
+  readonly capabilities: readonly MarketCapability[]
 
+  normalizeSymbol?(symbol: string): Promise<string>
   getQuote(symbol: string): Promise<Quote>
   search(query: string): Promise<Asset[]>
   getOrderbook?(symbol: string): Promise<Orderbook>
+  getFundingRate?(symbol: string): Promise<FundingRate>
   resolve?(symbol: string): Promise<Resolution | null>
 }
 ```
@@ -106,6 +108,6 @@ interface MarketAdapter {
 Agents interact with unimarket through a skill document (`skills/unimarket/SKILL.md`) that serves as the API contract. Key features:
 - **Version-aware**: All responses include `X-API-Version` header. SSE connections start with a `system.ready` event containing the server version
 - **Self-healing**: When the server version changes, agents can reload the skill document to pick up API changes
-- **Real-time events**: `GET /api/events` streams order fills, cancellations, and settlements via SSE
+- **Real-time events**: `GET /api/events` streams order fills, cancellations, settlements, and funding applications via SSE
 - **Reasoning audit trail**: Every write operation requires a `reasoning` field for full decision transparency
 - **Helper scripts**: `skills/unimarket/scripts/unimarket-agent.sh` wraps common auth/market/trading/event operations for faster agent integration

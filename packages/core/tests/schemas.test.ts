@@ -46,6 +46,16 @@ describe("schemas", () => {
       reasoning: "Place resting order near support",
     });
     expect(validLimit.success).toBe(true);
+
+    const fractionalQuantity = placeOrderSchema.safeParse({
+      market: "hyperliquid",
+      symbol: "BTC",
+      side: "buy",
+      type: "market",
+      quantity: 0.25,
+      reasoning: "fractional quantity allowed at schema layer; market rules validate precision",
+    });
+    expect(fractionalQuantity.success).toBe(true);
   });
 
   it("coerces and defaults pagination + order list query params", () => {

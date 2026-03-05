@@ -1,26 +1,74 @@
 import {
   cancelOrderSchema,
+  calculatePerpLiquidationPrice,
   executeFill,
+  executePerpFill,
   listOrdersQuerySchema,
   placeOrderSchema,
   reconcileOrdersSchema,
 } from "@unimarket/core";
-import type { MarketRegistry } from "@unimarket/markets";
+import type { MarketAdapter, MarketRegistry, TradingConstraints } from "@unimarket/markets";
 import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
 import { Hono, type Context } from "hono";
 
 import type { AppVariables } from "../auth.js";
 import { db } from "../db/client.js";
-import { accounts, orders, positions, trades } from "../db/schema.js";
+import { accounts, orderExecutionParams, orders, perpPositionState, positions, trades } from "../db/schema.js";
 import { jsonError } from "../errors.js";
 import { eventBus } from "../events.js";
+import { getTakerFeeRate } from "../fees.js";
 import { getFirst, getUserAccount, parseJson, parseQuery, withErrorHandling } from "../helpers.js";
 import { checkIdempotency, storeIdempotencyResponse, type IdempotencyStoreCandidate } from "../idempotency.js";
 import { makeId, nowIso } from "../utils.js";
 import { reconcilePendingOrders } from "../reconciler.js";
 
+const DEFAULT_TRADING_CONSTRAINTS: TradingConstraints = {
+  minQuantity: 1,
+  quantityStep: 1,
+  supportsFractional: false,
+  maxLeverage: null,
+};
+
+const normalizeTradingConstraints = (constraints: TradingConstraints | null | undefined): TradingConstraints => {
+  if (!constraints) return DEFAULT_TRADING_CONSTRAINTS;
+  const minQuantity = Number.isFinite(constraints.minQuantity) && constraints.minQuantity > 0
+    ? constraints.minQuantity
+    : DEFAULT_TRADING_CONSTRAINTS.minQuantity;
+  const quantityStep = Number.isFinite(constraints.quantityStep) && constraints.quantityStep > 0
+    ? constraints.quantityStep
+    : DEFAULT_TRADING_CONSTRAINTS.quantityStep;
+  const maxLeverage = constraints.maxLeverage ?? null;
+  return {
+    minQuantity,
+    quantityStep,
+    supportsFractional: Boolean(constraints.supportsFractional),
+    maxLeverage: typeof maxLeverage === "number" && Number.isFinite(maxLeverage) && maxLeverage > 0 ? maxLeverage : null,
+  };
+};
+
+const isStepAligned = (quantity: number, step: number): boolean => {
+  const units = quantity / step;
+  const rounded = Math.round(units);
+  const epsilon = Math.max(1e-9, Math.abs(step) * 1e-9);
+  return Math.abs(units - rounded) <= epsilon;
+};
+
+const resolveTradingConstraints = async (adapter: MarketAdapter, symbol: string): Promise<TradingConstraints> => {
+  if (typeof adapter.getTradingConstraints !== "function") {
+    return DEFAULT_TRADING_CONSTRAINTS;
+  }
+  const constraints = await adapter.getTradingConstraints(symbol);
+  return normalizeTradingConstraints(constraints);
+};
+
 export const createOrderRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();
+  const defaultMaintenanceMarginRatio = Number(process.env.MAINTENANCE_MARGIN_RATIO) || 0.05;
+
+  const isPerpMarket = (marketId: string): boolean => {
+    const adapter = registry.get(marketId);
+    return Boolean(adapter?.capabilities.includes("funding"));
+  };
 
   const maybeStoreResponse = async (
     idempotency: IdempotencyStoreCandidate | null,
@@ -49,6 +97,7 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
     reasoning: string,
     limitPrice: number | null,
     createdAt: string,
+    executionOptions: { isPerp: boolean; leverage: number; reduceOnly: boolean; takerFeeRate: number },
     c: Context<{ Variables: AppVariables }>,
   ): Promise<Response> => {
     const persistenceResult = await db.transaction(async (tx) => {
@@ -68,15 +117,66 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
           .limit(1)
           .all(),
       );
+      const existingPerpState = existingPosition && executionOptions.isPerp
+        ? await tx.select().from(perpPositionState).where(eq(perpPositionState.positionId, existingPosition.id)).get()
+        : null;
 
-      const fillResult = executeFill({
-        balance: account.balance,
-        position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
-        side,
-        quantity,
-        price: executionPrice,
-        allowShort: false,
-      });
+      let leverage = executionOptions.leverage;
+      let reduceOnly = executionOptions.reduceOnly;
+      let takerFeeRate = executionOptions.takerFeeRate;
+      if (existingOrder) {
+        const persistedParams = await tx
+          .select()
+          .from(orderExecutionParams)
+          .where(eq(orderExecutionParams.orderId, existingOrder.id))
+          .get();
+        if (persistedParams) {
+          leverage = persistedParams.leverage;
+          reduceOnly = persistedParams.reduceOnly;
+          takerFeeRate = persistedParams.takerFeeRate;
+        }
+      }
+
+      const spotFillResult = executionOptions.isPerp
+        ? null
+        : executeFill({
+          balance: account.balance,
+          position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
+          side,
+          quantity,
+          price: executionPrice,
+          allowShort: false,
+          takerFeeRate,
+        });
+      const perpFillResult = executionOptions.isPerp
+        ? executePerpFill({
+          balance: account.balance,
+          position: existingPosition
+            ? {
+              quantity: existingPosition.quantity,
+              avgCost: existingPosition.avgCost,
+              margin:
+                existingPerpState?.margin ??
+                Number(
+                  (Math.abs(existingPosition.quantity * existingPosition.avgCost) / Math.max(existingPerpState?.leverage ?? leverage, 1)).toFixed(6),
+                ),
+              leverage: existingPerpState?.leverage ?? leverage,
+              maintenanceMarginRatio: existingPerpState?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
+            }
+            : null,
+          side,
+          quantity,
+          price: executionPrice,
+          leverage,
+          maintenanceMarginRatio: existingPerpState?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
+          reduceOnly,
+          takerFeeRate,
+        })
+        : null;
+      const fillResult = executionOptions.isPerp ? perpFillResult : spotFillResult;
+      if (!fillResult) {
+        throw new Error("Order fill result not generated");
+      }
 
       if (existingOrder) {
         const claimedOrder = await tx
@@ -94,6 +194,24 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
         if (claimedOrder.rowsAffected === 0) {
           const latest = await getFirst(tx.select().from(orders).where(eq(orders.id, orderId)).limit(1).all());
           return { kind: "skipped" as const, order: latest ?? existingOrder };
+        }
+
+        const paramExists = await tx
+          .select()
+          .from(orderExecutionParams)
+          .where(eq(orderExecutionParams.orderId, orderId))
+          .get();
+        if (!paramExists) {
+          await tx
+            .insert(orderExecutionParams)
+            .values({
+              orderId,
+              leverage,
+              reduceOnly,
+              takerFeeRate,
+            })
+            .onConflictDoNothing()
+            .run();
         }
       } else {
         const insertedOrder = await tx
@@ -122,6 +240,17 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
           const latest = await getFirst(tx.select().from(orders).where(eq(orders.id, orderId)).limit(1).all());
           return { kind: "skipped" as const, order: latest };
         }
+
+        await tx
+          .insert(orderExecutionParams)
+          .values({
+            orderId,
+            leverage,
+            reduceOnly,
+            takerFeeRate,
+          })
+          .onConflictDoNothing()
+          .run();
       }
 
       const updatedAccount = await tx.update(accounts).set({ balance: fillResult.nextBalance }).where(eq(accounts.id, accountId)).run();
@@ -135,6 +264,10 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
           if (deletedPosition.rowsAffected === 0) {
             throw new Error("Position delete failed during order fill");
           }
+
+          if (executionOptions.isPerp) {
+            await tx.delete(perpPositionState).where(eq(perpPositionState.positionId, existingPosition.id)).run();
+          }
         }
       } else if (existingPosition) {
         const updatedPosition = await tx
@@ -145,11 +278,44 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
         if (updatedPosition.rowsAffected === 0) {
           throw new Error("Position update failed during order fill");
         }
+
+        if (executionOptions.isPerp) {
+          const perpNextPosition = perpFillResult?.nextPosition;
+          if (!perpNextPosition) {
+            throw new Error("Perp position state missing for filled order");
+          }
+          const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
+          await tx
+            .insert(perpPositionState)
+            .values({
+              positionId: existingPosition.id,
+              accountId,
+              market,
+              symbol,
+              leverage: perpNextPosition.leverage,
+              margin: perpNextPosition.margin,
+              maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+              liquidationPrice,
+              updatedAt: createdAt,
+            })
+            .onConflictDoUpdate({
+              target: perpPositionState.positionId,
+              set: {
+                leverage: perpNextPosition.leverage,
+                margin: perpNextPosition.margin,
+                maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+                liquidationPrice,
+                updatedAt: createdAt,
+              },
+            })
+            .run();
+        }
       } else {
+        const newPositionId = makeId("pos");
         await tx
           .insert(positions)
           .values({
-            id: makeId("pos"),
+            id: newPositionId,
             accountId,
             market,
             symbol,
@@ -157,6 +323,28 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
             avgCost: fillResult.nextPosition.avgCost,
           })
           .run();
+
+        if (executionOptions.isPerp) {
+          const perpNextPosition = perpFillResult?.nextPosition;
+          if (!perpNextPosition) {
+            throw new Error("Perp position state missing for filled order");
+          }
+          const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
+          await tx
+            .insert(perpPositionState)
+            .values({
+              positionId: newPositionId,
+              accountId,
+              market,
+              symbol,
+              leverage: perpNextPosition.leverage,
+              margin: perpNextPosition.margin,
+              maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+              liquidationPrice,
+              updatedAt: createdAt,
+            })
+            .run();
+        }
       }
 
       await tx
@@ -170,6 +358,7 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
           side,
           quantity,
           price: executionPrice,
+          fee: fillResult.feePaid,
           createdAt,
         })
         .run();
@@ -232,11 +421,54 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(parsed.data.market);
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", `Market not found: ${parsed.data.market}`);
+      const perpMarket = isPerpMarket(parsed.data.market);
+      const requestedLeverage = parsed.data.leverage ?? 1;
+      const reduceOnly = parsed.data.reduceOnly ?? false;
+      const takerFeeRate = getTakerFeeRate(parsed.data.market);
+      if (!perpMarket && requestedLeverage !== 1) {
+        return jsonError(c, 400, "INVALID_INPUT", "leverage is only supported for perpetual markets");
+      }
+      if (!perpMarket && reduceOnly) {
+        return jsonError(c, 400, "INVALID_INPUT", "reduceOnly is only supported for perpetual markets");
+      }
 
       const normalizedSymbol =
         typeof adapter.normalizeSymbol === "function"
           ? await adapter.normalizeSymbol(parsed.data.symbol)
           : parsed.data.symbol;
+      const tradingConstraints = await resolveTradingConstraints(adapter, normalizedSymbol);
+      if (parsed.data.quantity < tradingConstraints.minQuantity) {
+        return jsonError(
+          c,
+          400,
+          "INVALID_INPUT",
+          `quantity must be greater than or equal to ${tradingConstraints.minQuantity}`,
+        );
+      }
+      if (!isStepAligned(parsed.data.quantity, tradingConstraints.quantityStep)) {
+        return jsonError(
+          c,
+          400,
+          "INVALID_INPUT",
+          `quantity must align with step ${tradingConstraints.quantityStep}`,
+        );
+      }
+      if (!tradingConstraints.supportsFractional && !Number.isInteger(parsed.data.quantity)) {
+        return jsonError(c, 400, "INVALID_INPUT", "quantity must be an integer for this market");
+      }
+      const maxLeverage = tradingConstraints.maxLeverage ?? null;
+      if (
+        perpMarket &&
+        maxLeverage !== null &&
+        requestedLeverage > maxLeverage
+      ) {
+        return jsonError(
+          c,
+          400,
+          "INVALID_INPUT",
+          `leverage exceeds maxLeverage=${maxLeverage} for ${normalizedSymbol}`,
+        );
+      }
 
       const createdAt = nowIso();
       const orderId = makeId("ord");
@@ -278,6 +510,16 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
             createdAt,
           };
           await db.insert(orders).values(baseOrder).run();
+          await db
+            .insert(orderExecutionParams)
+            .values({
+              orderId,
+              leverage: requestedLeverage,
+              reduceOnly,
+              takerFeeRate,
+            })
+            .onConflictDoNothing()
+            .run();
           if (idempotencyCandidate) {
             await storeIdempotencyResponse(idempotencyCandidate, 201, baseOrder);
           }
@@ -287,7 +529,9 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
         const response = await persistFilledOrder(
           orderId, account.id, parsed.data.market, normalizedSymbol,
           parsed.data.side, parsed.data.quantity, executionPrice,
-          parsed.data.reasoning, parsed.data.limitPrice ?? null, createdAt, c,
+          parsed.data.reasoning, parsed.data.limitPrice ?? null, createdAt,
+          { isPerp: perpMarket, leverage: requestedLeverage, reduceOnly, takerFeeRate },
+          c,
         );
         await maybeStoreResponse(idempotencyCandidate, response);
         return response;
@@ -299,7 +543,9 @@ export const createOrderRoutes = (registry: MarketRegistry) => {
       const response = await persistFilledOrder(
         orderId, account.id, parsed.data.market, normalizedSymbol,
         parsed.data.side, parsed.data.quantity, executionPrice,
-        parsed.data.reasoning, null, createdAt, c,
+        parsed.data.reasoning, null, createdAt,
+        { isPerp: perpMarket, leverage: requestedLeverage, reduceOnly, takerFeeRate },
+        c,
       );
       await maybeStoreResponse(idempotencyCandidate, response);
       return response;

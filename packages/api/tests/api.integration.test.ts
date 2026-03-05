@@ -108,10 +108,48 @@ const quoteOnlyAdapter: MarketAdapter = {
   }),
 };
 
+const fundingAdapter: MarketAdapter = {
+  marketId: "funding-only",
+  displayName: "Funding Only",
+  description: "adapter to validate funding capability routes",
+  symbolFormat: "ticker",
+  priceRange: null,
+  capabilities: ["search", "quote", "funding"],
+  search: async () => [{ symbol: "BTC", name: "BTC-PERP" }],
+  normalizeSymbol: async (symbol) => symbol.trim().replace(/[-_\s]*perp$/i, "").toUpperCase(),
+  getQuote: async (symbol) => ({
+    symbol,
+    price: 100_000,
+    bid: 99_950,
+    ask: 100_050,
+    timestamp: new Date().toISOString(),
+  }),
+  getFundingRate: async (symbol) => {
+    if (symbol !== "BTC") {
+      throw new MarketAdapterError("SYMBOL_NOT_FOUND", `No funding data for ${symbol}`);
+    }
+    return {
+      symbol,
+      rate: 0.0002,
+      nextFundingAt: "2026-01-01T01:00:00.000Z",
+      timestamp: new Date().toISOString(),
+    };
+  },
+  getTradingConstraints: async () => ({
+    minQuantity: 0.001,
+    quantityStep: 0.001,
+    supportsFractional: true,
+    maxLeverage: 20,
+  }),
+};
+
 const resetDatabase = async (): Promise<void> => {
   await sqlite.execute("DELETE FROM trades");
+  await sqlite.execute("DELETE FROM order_execution_params");
+  await sqlite.execute("DELETE FROM perp_position_state");
   await sqlite.execute("DELETE FROM orders");
   await sqlite.execute("DELETE FROM positions");
+  await sqlite.execute("DELETE FROM funding_payments");
   await sqlite.execute("DELETE FROM journal");
   await sqlite.execute("DELETE FROM equity_snapshots");
   await sqlite.execute("DELETE FROM symbol_metadata_cache");
@@ -195,6 +233,7 @@ beforeAll(async () => {
   const registry = new MarketRegistry();
   registry.register(polymarketAdapter);
   registry.register(quoteOnlyAdapter);
+  registry.register(fundingAdapter);
 
   app = createApp({ registry });
 });
@@ -231,6 +270,7 @@ describe("api integration", () => {
     expect(health.version).toBe(API_VERSION);
     expect(health.markets.polymarket).toBe("available");
     expect(health.markets["quote-only"]).toBe("available");
+    expect(health.markets["funding-only"]).toBe("available");
 
     const unauthorizedOrders = await app.request("/api/orders");
     expect(unauthorizedOrders.status).toBe(401);
@@ -275,6 +315,7 @@ describe("api integration", () => {
     expect(healthResponse.headers.get("x-api-version")).toBe(API_VERSION);
     expect(healthPayload.version).toBe(API_VERSION);
     expect(healthPayload.markets.polymarket).toBe("available");
+    expect(healthPayload.markets.hyperliquid).toBe("available");
   });
 
   it("rejects malformed auth headers and invalid query payloads", async () => {
@@ -520,6 +561,66 @@ describe("api integration", () => {
     expect((await insufficientPositionOrder.json()).error.code).toBe("INSUFFICIENT_POSITION");
   });
 
+  it("enforces market-specific trading constraints and max leverage", async () => {
+    const user = await registerUser("trading-constraints-user");
+
+    const fractionalPolymarketOrder = await authedJson("/api/orders", user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        market: "polymarket",
+        symbol: "0x-market-fill",
+        side: "buy",
+        type: "market",
+        quantity: 1.5,
+        reasoning: "fractional size should be rejected for integer-only market",
+      }),
+    });
+    expect(fractionalPolymarketOrder.status).toBe(400);
+    expect((await fractionalPolymarketOrder.json()).error.code).toBe("INVALID_INPUT");
+
+    const overLeverageOrder = await authedJson("/api/orders", user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        market: "funding-only",
+        symbol: "BTC",
+        side: "buy",
+        type: "market",
+        quantity: 0.1,
+        leverage: 21,
+        reasoning: "leverage above symbol max should fail",
+      }),
+    });
+    expect(overLeverageOrder.status).toBe(400);
+    expect((await overLeverageOrder.json()).error.code).toBe("INVALID_INPUT");
+
+    const validFractionalPerpOrder = await authedJson("/api/orders", user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        market: "funding-only",
+        symbol: "BTC",
+        side: "buy",
+        type: "market",
+        quantity: 0.1,
+        leverage: 5,
+        reasoning: "fractional size should pass for fractional market",
+      }),
+    });
+    expect(validFractionalPerpOrder.status).toBe(201);
+    const validPayload = await validFractionalPerpOrder.json();
+    expect(validPayload.status).toBe("filled");
+
+    const positionRows = await db
+      .select()
+      .from(tables.positions)
+      .where(eq(tables.positions.accountId, user.account.id))
+      .all();
+    expect(positionRows).toHaveLength(1);
+    expect(positionRows[0]?.quantity).toBeCloseTo(0.1, 6);
+  });
+
   it("covers market discovery and capability-guarded market data endpoints", async () => {
     const user = await registerUser("market-user");
 
@@ -527,7 +628,7 @@ describe("api integration", () => {
     expect(marketsResponse.status).toBe(200);
     const marketsPayload = await marketsResponse.json();
     expect(marketsPayload.markets.map((item: { id: string }) => item.id)).toEqual(
-      expect.arrayContaining(["polymarket", "quote-only"]),
+      expect.arrayContaining(["polymarket", "quote-only", "funding-only"]),
     );
 
     const searchResponse = await authedJson("/api/markets/polymarket/search?q=reconcile", user.apiKey);
@@ -550,6 +651,47 @@ describe("api integration", () => {
     const resolvePayload = await resolveResponse.json();
     expect(resolvePayload.resolved).toBe(false);
 
+    const fundingResponse = await authedJson("/api/markets/funding-only/funding?symbol=btc-perp", user.apiKey);
+    expect(fundingResponse.status).toBe(200);
+    const fundingPayload = await fundingResponse.json();
+    expect(fundingPayload).toMatchObject({
+      symbol: "BTC",
+      rate: 0.0002,
+      nextFundingAt: "2026-01-01T01:00:00.000Z",
+    });
+
+    const fundingConstraintsResponse = await authedJson(
+      "/api/markets/funding-only/trading-constraints?symbol=btc-perp",
+      user.apiKey,
+    );
+    expect(fundingConstraintsResponse.status).toBe(200);
+    const fundingConstraintsPayload = await fundingConstraintsResponse.json();
+    expect(fundingConstraintsPayload).toMatchObject({
+      symbol: "BTC",
+      constraints: {
+        minQuantity: 0.001,
+        quantityStep: 0.001,
+        supportsFractional: true,
+        maxLeverage: 20,
+      },
+    });
+
+    const polymarketConstraintsResponse = await authedJson(
+      "/api/markets/polymarket/trading-constraints?symbol=0x-market-fill",
+      user.apiKey,
+    );
+    expect(polymarketConstraintsResponse.status).toBe(200);
+    const polymarketConstraintsPayload = await polymarketConstraintsResponse.json();
+    expect(polymarketConstraintsPayload).toMatchObject({
+      symbol: "0x-market-fill",
+      constraints: {
+        minQuantity: 1,
+        quantityStep: 1,
+        supportsFractional: false,
+        maxLeverage: null,
+      },
+    });
+
     const missingMarket = await authedJson("/api/markets/missing/quote?symbol=0x-market-fill", user.apiKey);
     expect(missingMarket.status).toBe(404);
     expect((await missingMarket.json()).error.code).toBe("MARKET_NOT_FOUND");
@@ -565,6 +707,96 @@ describe("api integration", () => {
     const unsupportedResolve = await authedJson("/api/markets/quote-only/resolve?symbol=abc", user.apiKey);
     expect(unsupportedResolve.status).toBe(400);
     expect((await unsupportedResolve.json()).error.code).toBe("CAPABILITY_NOT_SUPPORTED");
+
+    const unsupportedFunding = await authedJson("/api/markets/quote-only/funding?symbol=abc", user.apiKey);
+    expect(unsupportedFunding.status).toBe(400);
+    expect((await unsupportedFunding.json()).error.code).toBe("CAPABILITY_NOT_SUPPORTED");
+  });
+
+  it("applies configured taker fee and persists fee rate for pending orders", async () => {
+    const previousDefaultTakerFeeRate = process.env.DEFAULT_TAKER_FEE_RATE;
+    process.env.DEFAULT_TAKER_FEE_RATE = "0.01";
+
+    try {
+      const user = await registerUser("fee-config-user");
+      quoteBySymbol["0x-fee-market"] = { price: 10, bid: 9.9, ask: 10 };
+      quoteBySymbol["0x-fee-pending"] = { price: 10, bid: 9.9, ask: 10 };
+
+      const marketOrder = await authedJson("/api/orders", user.apiKey, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          market: "polymarket",
+          symbol: "0x-fee-market",
+          side: "buy",
+          type: "market",
+          quantity: 5,
+          reasoning: "market order with configured fee",
+        }),
+      });
+      expect(marketOrder.status).toBe(201);
+      const marketOrderPayload = await marketOrder.json();
+
+      const marketTrade = await db
+        .select()
+        .from(tables.trades)
+        .where(eq(tables.trades.orderId, marketOrderPayload.id as string))
+        .get();
+      expect(marketTrade?.fee).toBeCloseTo(0.5, 6);
+
+      const pendingOrder = await authedJson("/api/orders", user.apiKey, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          market: "polymarket",
+          symbol: "0x-fee-pending",
+          side: "buy",
+          type: "limit",
+          quantity: 2,
+          limitPrice: 8,
+          reasoning: "pending order should persist fee rate",
+        }),
+      });
+      expect(pendingOrder.status).toBe(201);
+      const pendingOrderPayload = await pendingOrder.json();
+      expect(pendingOrderPayload.status).toBe("pending");
+
+      const pendingParams = await db
+        .select()
+        .from(tables.orderExecutionParams)
+        .where(eq(tables.orderExecutionParams.orderId, pendingOrderPayload.id as string))
+        .get();
+      expect(pendingParams?.takerFeeRate).toBeCloseTo(0.01, 6);
+
+      process.env.DEFAULT_TAKER_FEE_RATE = "0.05";
+      quoteBySymbol["0x-fee-pending"] = { price: 7.5, bid: 7.4, ask: 7.5 };
+
+      const reconcileResponse = await authedJson("/api/orders/reconcile", user.apiKey, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reasoning: "fill pending order with persisted fee rate" }),
+      });
+      expect(reconcileResponse.status).toBe(200);
+      const reconcilePayload = await reconcileResponse.json();
+      expect(reconcilePayload.filledOrderIds).toContain(pendingOrderPayload.id);
+
+      const pendingTrade = await db
+        .select()
+        .from(tables.trades)
+        .where(eq(tables.trades.orderId, pendingOrderPayload.id as string))
+        .get();
+      expect(pendingTrade?.price).toBe(7.5);
+      expect(pendingTrade?.fee).toBeCloseTo(0.15, 6);
+
+      const accountRow = await db.select().from(tables.accounts).where(eq(tables.accounts.id, user.account.id)).get();
+      expect(accountRow?.balance).toBeCloseTo(INITIAL_BALANCE - 50 - 0.5 - 15 - 0.15, 6);
+    } finally {
+      if (previousDefaultTakerFeeRate === undefined) {
+        delete process.env.DEFAULT_TAKER_FEE_RATE;
+      } else {
+        process.env.DEFAULT_TAKER_FEE_RATE = previousDefaultTakerFeeRate;
+      }
+    }
   });
 
   it("supports batch quote/orderbook endpoints with partial failures", async () => {
@@ -619,6 +851,24 @@ describe("api integration", () => {
     const unsupportedBatchOrderbooks = await authedJson("/api/markets/quote-only/orderbooks?symbols=abc", user.apiKey);
     expect(unsupportedBatchOrderbooks.status).toBe(400);
     expect((await unsupportedBatchOrderbooks.json()).error.code).toBe("CAPABILITY_NOT_SUPPORTED");
+
+    const fundingsResponse = await authedJson("/api/markets/funding-only/fundings?symbols=btc,missing", user.apiKey);
+    expect(fundingsResponse.status).toBe(200);
+    const fundingsPayload = await fundingsResponse.json();
+    expect(fundingsPayload.fundings).toHaveLength(1);
+    expect(fundingsPayload.fundings[0]).toMatchObject({
+      symbol: "BTC",
+      rate: 0.0002,
+    });
+    expect(fundingsPayload.errors).toHaveLength(1);
+    expect(fundingsPayload.errors[0]).toMatchObject({
+      symbol: "missing",
+      error: { code: "SYMBOL_NOT_FOUND" },
+    });
+
+    const unsupportedBatchFundings = await authedJson("/api/markets/quote-only/fundings?symbols=abc", user.apiKey);
+    expect(unsupportedBatchFundings.status).toBe(400);
+    expect((await unsupportedBatchFundings.json()).error.code).toBe("CAPABILITY_NOT_SUPPORTED");
 
     expect(quoteSpy).toHaveBeenCalled();
     expect(orderbookSpy).toHaveBeenCalled();
@@ -1271,6 +1521,8 @@ describe("api integration", () => {
     const portfolioPayload = await portfolioResponse.json();
     expect(portfolioPayload.positions).toHaveLength(1);
     expect(portfolioPayload.totalPnl).toBeCloseTo(0, 6);
+    expect(portfolioPayload.totalFunding).toBe(0);
+    expect(portfolioPayload.positions[0].accumulatedFunding).toBe(0);
 
     const expectedBalance = Number((INITIAL_BALANCE - 20 * 0.52).toFixed(6));
     expect(portfolioPayload.balance).toBeCloseTo(expectedBalance, 6);
@@ -1286,6 +1538,79 @@ describe("api integration", () => {
     expect(tradeRows).toHaveLength(1);
     expect(positionRows).toHaveLength(1);
     expect(accountRows[0]?.balance).toBeCloseTo(expectedBalance, 6);
+  });
+
+  it("includes funding payments in portfolio aggregation and timeline views", async () => {
+    const user = await registerUser("funding-view-user");
+
+    await db
+      .insert(tables.positions)
+      .values({
+        id: "pos_funding_view",
+        accountId: user.account.id,
+        market: "funding-only",
+        symbol: "BTC",
+        quantity: 2,
+        avgCost: 95_000,
+      })
+      .run();
+
+    await db
+      .insert(tables.fundingPayments)
+      .values([
+        {
+          id: "fnd_credit",
+          accountId: user.account.id,
+          market: "funding-only",
+          symbol: "BTC",
+          quantity: 2,
+          fundingRate: -0.0001,
+          payment: 3.5,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "fnd_debit",
+          accountId: user.account.id,
+          market: "funding-only",
+          symbol: "BTC",
+          quantity: 2,
+          fundingRate: 0.0002,
+          payment: -1.25,
+          createdAt: "2026-01-01T01:00:00.000Z",
+        },
+      ])
+      .run();
+
+    const portfolioResponse = await authedJson("/api/account/portfolio", user.apiKey);
+    expect(portfolioResponse.status).toBe(200);
+    const portfolioPayload = await portfolioResponse.json();
+    expect(portfolioPayload.totalFunding).toBe(2.25);
+    expect(portfolioPayload.positions).toHaveLength(1);
+    expect(portfolioPayload.positions[0]).toMatchObject({
+      market: "funding-only",
+      symbol: "BTC",
+      accumulatedFunding: 2.25,
+    });
+
+    const timelineResponse = await authedJson("/api/account/timeline?limit=20&offset=0", user.apiKey);
+    expect(timelineResponse.status).toBe(200);
+    const timelinePayload = await timelineResponse.json();
+    const fundingEvent = timelinePayload.events.find(
+      (event: { type: string; data?: { id?: string; payment?: number } }) =>
+        event.type === "funding.applied" && event.data?.id === "fnd_debit",
+    );
+    expect(fundingEvent).toBeTruthy();
+    expect(fundingEvent.data.payment).toBe(-1.25);
+
+    const adminTimelineResponse = await authedJson(`/api/admin/users/${user.userId}/timeline?limit=20&offset=0`, "admin_test_key");
+    expect(adminTimelineResponse.status).toBe(200);
+    const adminTimelinePayload = await adminTimelineResponse.json();
+    const adminFundingEvent = adminTimelinePayload.events.find(
+      (event: { type: string; data?: { id?: string; payment?: number } }) =>
+        event.type === "funding.applied" && event.data?.id === "fnd_debit",
+    );
+    expect(adminFundingEvent).toBeTruthy();
+    expect(adminFundingEvent.data.payment).toBe(-1.25);
   });
 
   it("covers portfolio adapter-missing branch and journal tag deserialization fallback", async () => {

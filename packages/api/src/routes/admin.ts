@@ -1,6 +1,9 @@
 import {
   adminAmountSchema,
   calculateMarketValue,
+  calculatePerpMaintenanceMargin,
+  calculatePerpPositionEquity,
+  calculatePerpUnrealizedPnl,
   calculateUnrealizedPnl,
   paginationQuerySchema,
 } from "@unimarket/core";
@@ -10,7 +13,7 @@ import { Hono } from "hono";
 
 import type { AppVariables } from "../auth.js";
 import { db } from "../db/client.js";
-import { accounts, equitySnapshots, journal, orders, positions, users } from "../db/schema.js";
+import { accounts, equitySnapshots, fundingPayments, journal, orders, perpPositionState, positions, users } from "../db/schema.js";
 import { jsonError } from "../errors.js";
 import { deserializeTags, getUserAccount, parseJson, parseQuery, withErrorHandling } from "../helpers.js";
 import { resolveSymbolsWithCache } from "../symbol-metadata.js";
@@ -77,6 +80,8 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
       const userRows = await db.select().from(users).all();
       const accountRows = await db.select().from(accounts).all();
       const positionRows = await db.select().from(positions).all();
+      const perpStateRows = await db.select().from(perpPositionState).all();
+      const perpStateByPositionId = new Map(perpStateRows.map((row) => [row.positionId, row]));
 
       const primaryAccountByUserId = new Map<string, (typeof accountRows)[number]>();
       for (const account of [...accountRows].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
@@ -120,6 +125,7 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
         market: string; symbol: string; symbolName: string | null; side: string | null; quantity: number; avgCost: number;
         currentPrice: number | null; marketValue: number | null;
         unrealizedPnl: number | null; quoteTimestamp: string | null;
+        margin: number | null; maintenanceMargin: number | null; leverage: number | null; liquidationPrice: number | null;
       }>>();
 
       const marketSummaryById = new Map<string, {
@@ -138,9 +144,27 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
         const key = `${row.market}::${row.symbol}`;
         const currentPrice = quotePriceByKey.get(key) ?? null;
         const quoteTimestamp = quoteTimestampByKey.get(key) ?? null;
+        const perpState = perpStateByPositionId.get(row.id);
+        const isPerp = Boolean(adapter?.capabilities.includes("funding") && perpState);
 
-        const marketValue = currentPrice === null ? null : calculateMarketValue({ quantity: row.quantity, avgCost: row.avgCost }, currentPrice);
-        const unrealizedPnl = currentPrice === null ? null : calculateUnrealizedPnl({ quantity: row.quantity, avgCost: row.avgCost }, currentPrice);
+        const unrealizedPnl = currentPrice === null
+          ? null
+          : isPerp
+            ? calculatePerpUnrealizedPnl({ quantity: row.quantity, avgCost: row.avgCost }, currentPrice)
+            : calculateUnrealizedPnl({ quantity: row.quantity, avgCost: row.avgCost }, currentPrice);
+        const marketValue = currentPrice === null
+          ? null
+          : isPerp && perpState
+            ? calculatePerpPositionEquity({ quantity: row.quantity, avgCost: row.avgCost, margin: perpState.margin }, currentPrice)
+            : calculateMarketValue({ quantity: row.quantity, avgCost: row.avgCost }, currentPrice);
+        const maintenanceMargin = currentPrice === null
+          ? null
+          : isPerp && perpState
+            ? calculatePerpMaintenanceMargin(
+                { quantity: row.quantity, maintenanceMarginRatio: perpState.maintenanceMarginRatio },
+                currentPrice,
+              )
+            : null;
 
         if (!positionsByAccount.has(row.accountId)) positionsByAccount.set(row.accountId, []);
         positionsByAccount.get(row.accountId)?.push({
@@ -148,6 +172,10 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
           side: positionResolution.outcomes.get(row.symbol) ?? null,
           quantity: row.quantity, avgCost: row.avgCost,
           currentPrice, marketValue, unrealizedPnl, quoteTimestamp,
+          margin: perpState?.margin ?? null,
+          maintenanceMargin,
+          leverage: perpState?.leverage ?? null,
+          liquidationPrice: perpState?.liquidationPrice ?? null,
         });
 
         if (!marketSummaryById.has(row.market)) {
@@ -265,6 +293,14 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
       const orderRows = acc
         ? await db.select().from(orders).where(eq(orders.accountId, acc.id)).orderBy(desc(orders.createdAt)).all()
         : [];
+      const fundingRows = acc
+        ? await db
+          .select()
+          .from(fundingPayments)
+          .where(eq(fundingPayments.accountId, acc.id))
+          .orderBy(desc(fundingPayments.createdAt))
+          .all()
+        : [];
       const journalRows = await db.select().from(journal).where(eq(journal.userId, userId)).orderBy(desc(journal.createdAt)).all();
 
       const events = [
@@ -299,6 +335,21 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
             symbolName: null as string | null,
           },
           reasoning: null,
+          createdAt: row.createdAt,
+        })),
+        ...fundingRows.map((row) => ({
+          type: "funding.applied",
+          data: {
+            id: row.id,
+            market: row.market,
+            symbol: row.symbol,
+            quantity: row.quantity,
+            fundingRate: row.fundingRate,
+            payment: row.payment,
+            appliedAt: row.createdAt,
+            symbolName: null as string | null,
+          },
+          reasoning: `Funding applied from ${row.market}:${row.symbol} at rate ${row.fundingRate}`,
           createdAt: row.createdAt,
         })),
       ]

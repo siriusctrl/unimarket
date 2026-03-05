@@ -1,16 +1,19 @@
-import { executeFill } from "@unimarket/core";
+import { calculatePerpLiquidationPrice, executeFill, executePerpFill } from "@unimarket/core";
 import type { MarketRegistry, Quote } from "@unimarket/markets";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "./db/client.js";
-import { accounts, orders, positions, trades } from "./db/schema.js";
+import { accounts, orderExecutionParams, orders, perpPositionState, positions, trades } from "./db/schema.js";
 import { eventBus } from "./events.js";
+import { getTakerFeeRate } from "./fees.js";
 import { makeId, nowIso } from "./utils.js";
 
 const getFirst = async <T>(query: Promise<T[]>): Promise<T | undefined> => {
   const rows = await query;
   return rows[0];
 };
+
+const defaultMaintenanceMarginRatio = Number(process.env.MAINTENANCE_MARGIN_RATIO) || 0.05;
 
 export const reconcilePendingOrders = async (
   registry: MarketRegistry,
@@ -171,6 +174,8 @@ export const reconcilePendingOrders = async (
     }
 
     try {
+      const adapter = registry.get(pendingOrder.market);
+      const isPerp = Boolean(adapter?.capabilities.includes("funding"));
       const filledAt = nowIso();
       const persisted = await db.transaction(async (tx) => {
         const account = await getFirst(tx.select().from(accounts).where(eq(accounts.id, pendingOrder.accountId)).limit(1).all());
@@ -191,14 +196,56 @@ export const reconcilePendingOrders = async (
             .all(),
         );
 
-        const fillResult = executeFill({
-          balance: account.balance,
-          position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
-          side: pendingOrder.side as "buy" | "sell",
-          quantity: pendingOrder.quantity,
-          price: quotePrice,
-          allowShort: false,
-        });
+        const existingPerp = isPerp && existingPosition
+          ? await tx.select().from(perpPositionState).where(eq(perpPositionState.positionId, existingPosition.id)).get()
+          : null;
+        const persistedParams = await tx
+          .select()
+          .from(orderExecutionParams)
+          .where(eq(orderExecutionParams.orderId, pendingOrder.id))
+          .get();
+        const leverage = persistedParams?.leverage ?? 1;
+        const reduceOnly = persistedParams?.reduceOnly ?? false;
+        const takerFeeRate = persistedParams?.takerFeeRate ?? getTakerFeeRate(pendingOrder.market);
+
+        const spotFillResult = isPerp
+          ? null
+          : executeFill({
+              balance: account.balance,
+              position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
+              side: pendingOrder.side as "buy" | "sell",
+              quantity: pendingOrder.quantity,
+              price: quotePrice,
+              allowShort: false,
+              takerFeeRate,
+            });
+        const perpFillResult = isPerp
+          ? executePerpFill({
+              balance: account.balance,
+              position: existingPosition
+                ? {
+                    quantity: existingPosition.quantity,
+                    avgCost: existingPosition.avgCost,
+                    margin:
+                      existingPerp?.margin ??
+                      Number((Math.abs(existingPosition.quantity * existingPosition.avgCost) / Math.max(existingPerp?.leverage ?? leverage, 1)).toFixed(6)),
+                    leverage: existingPerp?.leverage ?? leverage,
+                    maintenanceMarginRatio: existingPerp?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
+                  }
+                : null,
+              side: pendingOrder.side as "buy" | "sell",
+              quantity: pendingOrder.quantity,
+              price: quotePrice,
+              leverage,
+              maintenanceMarginRatio: existingPerp?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
+              reduceOnly,
+              takerFeeRate,
+            })
+          : null;
+        const fillResult = isPerp ? perpFillResult : spotFillResult;
+        if (!fillResult) {
+          throw new Error("Order fill result not generated during reconciliation");
+        }
 
         const claimedOrder = await tx
           .update(orders)
@@ -218,6 +265,10 @@ export const reconcilePendingOrders = async (
             if (deletedPosition.rowsAffected === 0) {
               throw new Error("Position delete failed during reconciliation");
             }
+
+            if (isPerp) {
+              await tx.delete(perpPositionState).where(eq(perpPositionState.positionId, existingPosition.id)).run();
+            }
           }
         } else if (existingPosition) {
           const updatedPosition = await tx
@@ -228,11 +279,44 @@ export const reconcilePendingOrders = async (
           if (updatedPosition.rowsAffected === 0) {
             throw new Error("Position update failed during reconciliation");
           }
+
+          if (isPerp) {
+            const perpNextPosition = perpFillResult?.nextPosition;
+            if (!perpNextPosition) {
+              throw new Error("Perp position state missing for reconciled fill");
+            }
+            const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
+            await tx
+              .insert(perpPositionState)
+              .values({
+                positionId: existingPosition.id,
+                accountId: account.id,
+                market: pendingOrder.market,
+                symbol: pendingOrder.symbol,
+                leverage: perpNextPosition.leverage,
+                margin: perpNextPosition.margin,
+                maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+                liquidationPrice,
+                updatedAt: filledAt,
+              })
+              .onConflictDoUpdate({
+                target: perpPositionState.positionId,
+                set: {
+                  leverage: perpNextPosition.leverage,
+                  margin: perpNextPosition.margin,
+                  maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+                  liquidationPrice,
+                  updatedAt: filledAt,
+                },
+              })
+              .run();
+          }
         } else {
+          const newPositionId = makeId("pos");
           await tx
             .insert(positions)
             .values({
-              id: makeId("pos"),
+              id: newPositionId,
               accountId: account.id,
               market: pendingOrder.market,
               symbol: pendingOrder.symbol,
@@ -240,6 +324,28 @@ export const reconcilePendingOrders = async (
               avgCost: fillResult.nextPosition.avgCost,
             })
             .run();
+
+          if (isPerp) {
+            const perpNextPosition = perpFillResult?.nextPosition;
+            if (!perpNextPosition) {
+              throw new Error("Perp position state missing for reconciled fill");
+            }
+            const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
+            await tx
+              .insert(perpPositionState)
+              .values({
+                positionId: newPositionId,
+                accountId: account.id,
+                market: pendingOrder.market,
+                symbol: pendingOrder.symbol,
+                leverage: perpNextPosition.leverage,
+                margin: perpNextPosition.margin,
+                maintenanceMarginRatio: perpNextPosition.maintenanceMarginRatio,
+                liquidationPrice,
+                updatedAt: filledAt,
+              })
+              .run();
+          }
         }
 
         await tx
@@ -253,6 +359,7 @@ export const reconcilePendingOrders = async (
             side: pendingOrder.side,
             quantity: pendingOrder.quantity,
             price: quotePrice,
+            fee: fillResult.feePaid,
             createdAt: filledAt,
           })
           .run();

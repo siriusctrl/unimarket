@@ -1,6 +1,6 @@
 ---
 name: unimarket
-description: Simulated multi-market paper trading workflow for agents. Use when an agent needs to register, discover markets dynamically, fetch quotes/orderbooks (single or batch), place/cancel orders, review account state (orders/positions/portfolio/timeline/journal), and consume SSE events with reconnect cursors. Apply strict write semantics (`reasoning` required; idempotency keys for safe retries). Manual reconcile is optional and mainly for immediate consistency checks.
+description: Simulated multi-market paper trading workflow for agents. Use when an agent needs to register, discover markets dynamically, fetch quotes/orderbooks/funding rates (single or batch), place/cancel orders, review account state (orders/positions/portfolio/timeline/journal), and consume SSE events with reconnect cursors. Apply strict write semantics (`reasoning` required; idempotency keys for safe retries). Manual reconcile is optional and mainly for immediate consistency checks.
 ---
 
 # Unimarket
@@ -23,21 +23,30 @@ Authentication:
    - `GET /api/markets`.
 3. Search assets:
    - `GET /api/markets/{market}/search`.
-4. Fetch market data:
-   - Single: `quote`, `orderbook`, `resolve`
-   - Batch: `quotes`, `orderbooks`
-5. Trade:
+4. Fetch trading constraints for the symbol you plan to trade:
+   - `GET /api/markets/{market}/trading-constraints?symbol=...`
+5. Fetch market data:
+   - Single: `quote`, `orderbook`, `funding`, `resolve`
+   - Batch: `quotes`, `orderbooks`, `fundings`
+6. Trade:
    - `POST /api/orders` (market or limit).
    - `DELETE /api/orders/:id` for pending cancel.
-6. Audit:
+7. Audit:
    - `GET /api/orders`, `GET /api/positions`, `GET /api/account/portfolio`, `GET /api/account/timeline`, `GET /api/journal`.
-7. Optional manual reconcile:
+8. Optional manual reconcile:
    - `POST /api/orders/reconcile` only when immediate state convergence is required.
 
 ## Operating Rules
 
 - Discover market IDs via `GET /api/markets`; do not hardcode market assumptions.
 - Include non-empty `reasoning` in state-changing operations.
+- `quantity` is decimal-capable in schema validation, but final order acceptance is market/symbol specific.
+- Before `POST /api/orders`, read `/api/markets/{market}/trading-constraints?symbol=...` and satisfy:
+  - `minQuantity`
+  - `quantityStep`
+  - `supportsFractional` (if false, send integer quantity)
+  - `maxLeverage` (for perp markets)
+- Hyperliquid: quantity precision follows `szDecimals`; leverage must be `<= maxLeverage` for that symbol.
 - Background reconciler already runs server-side. Do not call manual reconcile every cycle.
 - Use `POST /api/orders/reconcile` only when you need deterministic immediate updates for pending limit orders.
 - Send `Idempotency-Key` for retryable writes:
@@ -59,6 +68,9 @@ Common commands:
 - `buy`, `sell`, `cancel`, `orders`, `reconcile`
 - `account`, `portfolio`, `positions`, `timeline`, `journal-add`, `journal-list`
 - `events [since_event_id]`
+
+`trading-constraints` is not wrapped by the helper script; call it directly:
+- `GET /api/markets/{market}/trading-constraints?symbol=...`
 
 ## Read References On Demand
 

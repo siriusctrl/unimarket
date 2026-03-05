@@ -9,6 +9,7 @@ import {
   type Resolution,
   type SearchOptions,
   type SymbolResolution,
+  type TradingConstraints,
 } from "./types.js";
 
 type UnknownObject = Record<string, unknown>;
@@ -23,6 +24,12 @@ const RESOLVE_NAMES_CONCURRENCY = 8;
 const DEFAULT_GAMMA_BASE_URL = "https://gamma-api.polymarket.com";
 const DEFAULT_CLOB_BASE_URL = "https://clob.polymarket.com";
 const CONDITION_ID_PATTERN = /^0x[a-fA-F0-9]{64}$/;
+const POLYMARKET_TRADING_CONSTRAINTS: TradingConstraints = {
+  minQuantity: 1,
+  quantityStep: 1,
+  supportsFractional: false,
+  maxLeverage: null,
+};
 
 const parseNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -270,6 +277,9 @@ export class PolymarketAdapter implements MarketAdapter {
               outcomes,
               outcomePrices,
               defaultTokenId: tokenIds[0] ?? null,
+              minQuantity: POLYMARKET_TRADING_CONSTRAINTS.minQuantity,
+              quantityStep: POLYMARKET_TRADING_CONSTRAINTS.quantityStep,
+              supportsFractional: POLYMARKET_TRADING_CONSTRAINTS.supportsFractional,
             }
             : null;
 
@@ -289,6 +299,10 @@ export class PolymarketAdapter implements MarketAdapter {
 
   async normalizeSymbol(symbol: string): Promise<string> {
     return this.resolveTokenId(symbol);
+  }
+
+  async getTradingConstraints(_symbol: string): Promise<TradingConstraints> {
+    return POLYMARKET_TRADING_CONSTRAINTS;
   }
 
   async getQuote(symbol: string): Promise<Quote> {

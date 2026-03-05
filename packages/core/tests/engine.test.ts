@@ -71,6 +71,42 @@ describe("executeFill", () => {
       }),
     ).toThrowError(TradingError);
   });
+
+  it("applies taker fee on buys and sells", () => {
+    const bought = executeFill({
+      balance: 100,
+      side: "buy",
+      quantity: 10,
+      price: 5,
+      takerFeeRate: 0.01,
+    });
+    expect(bought.feePaid).toBe(0.5);
+    expect(bought.nextBalance).toBe(49.5);
+
+    const sold = executeFill({
+      balance: bought.nextBalance,
+      position: bought.nextPosition,
+      side: "sell",
+      quantity: 4,
+      price: 6,
+      takerFeeRate: 0.01,
+      allowShort: false,
+    });
+    expect(sold.feePaid).toBe(0.24);
+    expect(sold.nextBalance).toBe(73.26);
+  });
+
+  it("includes fee in balance check for buys", () => {
+    expect(() =>
+      executeFill({
+        balance: 100,
+        side: "buy",
+        quantity: 100,
+        price: 1,
+        takerFeeRate: 0.01,
+      }),
+    ).toThrowError(TradingError);
+  });
 });
 
 describe("position helpers", () => {

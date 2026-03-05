@@ -1,4 +1,4 @@
-import { MarketRegistry, PolymarketAdapter } from "@unimarket/markets";
+import { HyperliquidAdapter, MarketRegistry, PolymarketAdapter } from "@unimarket/markets";
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 
@@ -23,6 +23,7 @@ export type CreateAppOptions = {
 export const createDefaultRegistry = (): MarketRegistry => {
   const registry = new MarketRegistry();
   registry.register(new PolymarketAdapter());
+  registry.register(new HyperliquidAdapter());
   return registry;
 };
 

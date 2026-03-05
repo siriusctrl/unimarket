@@ -6,9 +6,11 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 
 - **Market agnostic** — unified API across all markets, discover capabilities at runtime
 - **Polymarket** — prediction market trading with live odds from the CLOB API
+- **Hyperliquid** — perpetual futures with symbol-level fractional size precision and max leverage limits
 - **Extensible** — add new markets by implementing a simple adapter interface
 - **Agent-friendly** — skill-based integration with version-aware SSE events, self-describing market capabilities
 - **Decision transparency** — every action requires reasoning; journal + timeline for full audit trail
+- **Constraint-aware orders** — decimal-capable quantities validated by per-market rules (`minQuantity`, `quantityStep`, integer/fractional support, `maxLeverage`)
 
 ---
 
@@ -32,21 +34,62 @@ This installs local tooling under `.agents/` (gitignored in this repo).
 
 ### Environment Variables
 
+The API automatically loads environment variables from repo root in this order:
+1. `.env.local`
+2. `.env`
+
+Any variable already present in the shell environment keeps highest priority.
+You can start from [.env.example](.env.example).
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ADMIN_API_KEY` | **Yes** | — | Admin API key for dashboard login and admin endpoints |
 | `DB_URL` / `DB_PATH` | No | `file:unimarket.sqlite` | SQLite database path |
 | `RECONCILE_INTERVAL_MS` | No | `1000` | Pending order reconciliation interval (ms) |
+| `SETTLE_INTERVAL_MS` | No | `60000` | Settlement worker interval (ms) |
+| `FUNDING_INTERVAL_MS` | No | `3600000` | Funding collector interval (ms) |
+| `LIQUIDATION_INTERVAL_MS` | No | `5000` | Liquidation worker interval (ms) |
+| `MAINTENANCE_MARGIN_RATIO` | No | `0.05` | Maintenance margin ratio for perp positions |
+| `DEFAULT_TAKER_FEE_RATE` | No | `0` | Default taker fee rate for all markets |
+| `${MARKET}_TAKER_FEE_RATE` | No | — | Market-specific taker fee override (e.g. `HYPERLIQUID_TAKER_FEE_RATE`) |
 | `SERVE_WEB_DIST` | No | `false` | Serve built frontend from API server on `:3100` when set to `true` |
+
+### Trading Constraints
+
+Order payload `quantity` is decimal-capable at schema layer, then validated per market/symbol.
+
+Discover constraints before placing orders:
+
+```bash
+GET /api/markets/:market/trading-constraints?symbol=<symbol>
+```
+
+Example response:
+
+```json
+{
+  "symbol": "BTC",
+  "constraints": {
+    "minQuantity": 0.00001,
+    "quantityStep": 0.00001,
+    "supportsFractional": true,
+    "maxLeverage": 50
+  }
+}
+```
+
+Notes:
+- Some markets require integer quantities (`supportsFractional: false`, usually `quantityStep: 1`).
+- Hyperliquid derives `quantityStep` and fractional support from `szDecimals`, and enforces symbol `maxLeverage`.
 
 ### Running the Server
 
 ```bash
-# Set the admin key and start everything (API + web dashboard)
-export ADMIN_API_KEY=your-secret-key
-pnpm dev
+# Option A: put this in .env at repo root, then run
+# ADMIN_API_KEY=your-secret-key
+# pnpm dev
 
-# Or set it inline
+# Option B: set it inline
 ADMIN_API_KEY=your-secret-key pnpm dev
 
 # Individual services

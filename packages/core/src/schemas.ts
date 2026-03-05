@@ -18,8 +18,10 @@ export const placeOrderSchema = z
     symbol: symbolSchema,
     side: sideSchema,
     type: orderTypeSchema,
-    quantity: z.number().int().positive(),
+    quantity: z.number().positive(),
     limitPrice: z.number().positive().optional(),
+    leverage: z.number().positive().max(100).optional(),
+    reduceOnly: z.boolean().optional(),
     reasoning: reasoningSchema,
   })
   .superRefine((value, ctx) => {

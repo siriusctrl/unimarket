@@ -48,7 +48,7 @@ const migrationStatements = [
     symbol TEXT NOT NULL,
     side TEXT NOT NULL,
     type TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
+    quantity REAL NOT NULL,
     limit_price REAL,
     status TEXT NOT NULL,
     filled_price REAL,
@@ -63,17 +63,41 @@ const migrationStatements = [
   `CREATE INDEX IF NOT EXISTS orders_market_idx ON orders(market)`,
   `CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status)`,
   `
+  CREATE TABLE IF NOT EXISTS order_execution_params (
+    order_id TEXT PRIMARY KEY,
+    leverage REAL NOT NULL,
+    reduce_only INTEGER NOT NULL,
+    taker_fee_rate REAL NOT NULL DEFAULT 0
+  )
+  `,
+  `CREATE INDEX IF NOT EXISTS order_execution_params_leverage_idx ON order_execution_params(leverage)`,
+  `
   CREATE TABLE IF NOT EXISTS positions (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
     market TEXT NOT NULL,
     symbol TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
+    quantity REAL NOT NULL,
     avg_cost REAL NOT NULL
   )
   `,
   `CREATE UNIQUE INDEX IF NOT EXISTS positions_unique_idx ON positions(account_id, market, symbol)`,
   `CREATE INDEX IF NOT EXISTS positions_account_id_idx ON positions(account_id)`,
+  `
+  CREATE TABLE IF NOT EXISTS perp_position_state (
+    position_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    leverage REAL NOT NULL,
+    margin REAL NOT NULL,
+    maintenance_margin_ratio REAL NOT NULL,
+    liquidation_price REAL,
+    updated_at TEXT NOT NULL
+  )
+  `,
+  `CREATE INDEX IF NOT EXISTS perp_position_state_account_id_idx ON perp_position_state(account_id)`,
+  `CREATE INDEX IF NOT EXISTS perp_position_state_market_symbol_idx ON perp_position_state(market, symbol)`,
   `
   CREATE TABLE IF NOT EXISTS trades (
     id TEXT PRIMARY KEY,
@@ -82,8 +106,9 @@ const migrationStatements = [
     market TEXT NOT NULL,
     symbol TEXT NOT NULL,
     side TEXT NOT NULL,
-    quantity INTEGER NOT NULL,
+    quantity REAL NOT NULL,
     price REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   )
   `,
@@ -139,10 +164,44 @@ const migrationStatements = [
   `,
   `CREATE UNIQUE INDEX IF NOT EXISTS idempotency_keys_unique_scope_uq ON idempotency_keys(user_id, key, method, path)`,
   `CREATE INDEX IF NOT EXISTS idempotency_keys_created_at_idx ON idempotency_keys(created_at)`,
+  `
+  CREATE TABLE IF NOT EXISTS funding_payments (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    funding_rate REAL NOT NULL,
+    payment REAL NOT NULL,
+    created_at TEXT NOT NULL
+  )
+  `,
+  `CREATE INDEX IF NOT EXISTS funding_payments_account_id_idx ON funding_payments(account_id)`,
+  `CREATE INDEX IF NOT EXISTS funding_payments_market_symbol_idx ON funding_payments(market, symbol)`,
 ];
+
+const additiveMigrationStatements = [
+  `ALTER TABLE order_execution_params ADD COLUMN taker_fee_rate REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE trades ADD COLUMN fee REAL NOT NULL DEFAULT 0`,
+];
+
+const isDuplicateColumnError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  return error.message.toLowerCase().includes("duplicate column name");
+};
 
 export const migrate = async (): Promise<void> => {
   for (const statement of migrationStatements) {
     await sqlite.execute(statement);
+  }
+
+  for (const statement of additiveMigrationStatements) {
+    try {
+      await sqlite.execute(statement);
+    } catch (error) {
+      if (!isDuplicateColumnError(error)) {
+        throw error;
+      }
+    }
   }
 };

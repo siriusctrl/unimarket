@@ -12,12 +12,14 @@ export type ExecutionInput = {
   quantity: number;
   price: number;
   allowShort?: boolean;
+  takerFeeRate?: number;
 };
 
 export type ExecutionResult = {
   nextBalance: number;
   nextPosition: Position | null;
   realizedPnl: number;
+  feePaid: number;
 };
 
 export class TradingError extends Error {
@@ -33,11 +35,16 @@ const roundCurrency = (value: number): number => Number(value.toFixed(6));
 
 export const executeFill = (input: ExecutionInput): ExecutionResult => {
   const allowShort = input.allowShort ?? false;
+  const takerFeeRate = input.takerFeeRate ?? 0;
+  if (takerFeeRate < 0 || takerFeeRate >= 1 || Number.isNaN(takerFeeRate)) {
+    throw new TradingError("INVALID_INPUT", "takerFeeRate must be within [0, 1)");
+  }
   const current = input.position ?? { quantity: 0, avgCost: 0 };
   const gross = input.quantity * input.price;
+  const feePaid = roundCurrency(gross * takerFeeRate);
 
   if (input.side === "buy") {
-    if (input.balance < gross) {
+    if (input.balance < gross + feePaid) {
       throw new TradingError("INSUFFICIENT_BALANCE", "Insufficient balance for this order");
     }
 
@@ -46,9 +53,10 @@ export const executeFill = (input: ExecutionInput): ExecutionResult => {
     const nextAvgCost = newQuantity === 0 ? 0 : weightedCost / newQuantity;
 
     return {
-      nextBalance: roundCurrency(input.balance - gross),
+      nextBalance: roundCurrency(input.balance - gross - feePaid),
       nextPosition: { quantity: newQuantity, avgCost: roundCurrency(nextAvgCost) },
       realizedPnl: 0,
+      feePaid,
     };
   }
 
@@ -60,7 +68,7 @@ export const executeFill = (input: ExecutionInput): ExecutionResult => {
   const realizedPnl = input.quantity * (input.price - current.avgCost);
 
   return {
-    nextBalance: roundCurrency(input.balance + gross),
+    nextBalance: roundCurrency(input.balance + gross - feePaid),
     nextPosition:
       nextQuantity === 0
         ? null
@@ -69,6 +77,7 @@ export const executeFill = (input: ExecutionInput): ExecutionResult => {
             avgCost: current.avgCost,
           },
     realizedPnl: roundCurrency(realizedPnl),
+    feePaid,
   };
 };
 

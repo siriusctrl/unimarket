@@ -80,6 +80,8 @@ const insertPosition = async (params: {
 
 const resetDatabase = async (): Promise<void> => {
   await sqlite.execute("DELETE FROM trades");
+  await sqlite.execute("DELETE FROM order_execution_params");
+  await sqlite.execute("DELETE FROM perp_position_state");
   await sqlite.execute("DELETE FROM orders");
   await sqlite.execute("DELETE FROM positions");
   await sqlite.execute("DELETE FROM journal");
