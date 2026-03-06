@@ -1,36 +1,39 @@
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+
 import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
-import { formatCurrency, formatSignedCurrency } from "../../lib/admin";
-import type { AgentOption, PortfolioData } from "../../lib/admin-api";
+import { formatSignedCurrency } from "../../lib/admin";
+import type { AgentOption, PortfolioData, PortfolioPosition } from "../../lib/admin-api";
+
+const RECENT_PAGE_SIZE = 5;
 
 export const PortfolioPanels = ({
   selectedAgent,
   portfolio,
+  onClosePosition,
 }: {
   selectedAgent: AgentOption | null;
   portfolio: PortfolioData | null;
+  onClosePosition?: (position: PortfolioPosition) => void;
 }) => {
+  const [recentPage, setRecentPage] = useState(0);
+
   if (!selectedAgent) {
     return null;
   }
 
+  const recentOrders = portfolio?.recentOrders ?? [];
+  const totalRecentPages = Math.max(1, Math.ceil(recentOrders.length / RECENT_PAGE_SIZE));
+  const clampedPage = Math.min(recentPage, totalRecentPages - 1);
+  const pagedOrders = recentOrders.slice(
+    clampedPage * RECENT_PAGE_SIZE,
+    (clampedPage + 1) * RECENT_PAGE_SIZE,
+  );
+
   return (
     <>
-      <Card className="animate-in fade-in-0 border-primary/20 bg-card/55 duration-200">
-        <CardContent className="py-3.5">
-          <div className="grid grid-cols-2">
-            <div className="pr-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Trading as</p>
-              <p className="truncate text-sm font-semibold">{selectedAgent.userName}</p>
-            </div>
-            <div className="border-l border-border/30 pl-3 text-right">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Balance</p>
-              <p className="font-mono text-sm font-bold tabular-nums">{formatCurrency(portfolio?.balance ?? selectedAgent.balance)}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {portfolio && portfolio.positions.length > 0 ? (
         <Card className="animate-in fade-in-0 border-border/50 bg-card/45 duration-200">
           <CardHeader className="pb-2">
@@ -40,20 +43,46 @@ export const PortfolioPanels = ({
             {portfolio.positions.slice(0, 8).map((position) => (
               <div
                 key={`${position.market}:${position.symbol}`}
-                className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-xs"
+                className="group/pos flex items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-xs"
               >
                 <div className="min-w-0">
-                  <p className="max-w-[140px] truncate font-mono font-medium">{position.symbol}</p>
-                  <p className="capitalize text-muted-foreground">{position.market}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="max-w-[120px] truncate font-mono font-medium">{position.symbol}</p>
+                    {position.leverage && position.leverage > 1 ? (
+                      <span className="rounded bg-amber-500/15 px-1 py-px text-[10px] font-semibold tabular-nums text-amber-600 dark:text-amber-400">
+                        {position.leverage}×
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[10px] font-semibold ${position.quantity > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                      {position.quantity > 0 ? "LONG" : "SHORT"}
+                    </span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="capitalize text-muted-foreground">{position.market}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-mono">
-                    {position.quantity} @ {position.avgCost.toFixed(2)}
-                  </p>
-                  {position.unrealizedPnl !== null ? (
-                    <p className={position.unrealizedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
-                      {formatSignedCurrency(position.unrealizedPnl)}
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="font-mono">
+                      {position.quantity} @ {position.avgCost.toFixed(2)}
                     </p>
+                    {position.unrealizedPnl !== null ? (
+                      <p className={position.unrealizedPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                        {formatSignedCurrency(position.unrealizedPnl)}
+                      </p>
+                    ) : null}
+                  </div>
+                  {onClosePosition ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover/pos:opacity-100 hover:bg-rose-500/15 hover:text-rose-500"
+                      onClick={() => onClosePosition(position)}
+                      title="Close position"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -100,13 +129,40 @@ export const PortfolioPanels = ({
         </Card>
       ) : null}
 
-      {portfolio && portfolio.recentOrders.length > 0 ? (
+      {recentOrders.length > 0 ? (
         <Card className="animate-in fade-in-0 border-border/50 bg-card/45 duration-200">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Recent Orders</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Recent Orders</CardTitle>
+              {totalRecentPages > 1 ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {clampedPage + 1}/{totalRecentPages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={clampedPage === 0}
+                    onClick={() => setRecentPage((p) => Math.max(0, p - 1))}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    disabled={clampedPage >= totalRecentPages - 1}
+                    onClick={() => setRecentPage((p) => Math.min(totalRecentPages - 1, p + 1))}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
-            {portfolio.recentOrders.slice(0, 10).map((order) => (
+            {pagedOrders.map((order) => (
               <div
                 key={order.id}
                 className="flex items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-xs"

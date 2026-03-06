@@ -75,20 +75,6 @@ export const MarketSearchPanel = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5 rounded-lg border border-border/50 bg-muted/50 p-1">
-        {markets.map((market) => (
-          <Button
-            key={market.id}
-            variant={selectedMarket === market.id ? "default" : "ghost"}
-            size="sm"
-            className="h-8 text-xs capitalize"
-            onClick={() => onSelectMarket(market.id)}
-          >
-            {market.name}
-          </Button>
-        ))}
-      </div>
-
       <div className="space-y-3 rounded-xl border border-border/50 bg-card/35 p-3">
         <div className="flex items-start justify-between gap-3">
           <div>

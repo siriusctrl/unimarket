@@ -73,6 +73,7 @@ export const Layout = () => {
           </nav>
 
           <div className="hidden items-center gap-2 sm:flex">
+            <div id="header-actions-slot" className="flex items-center gap-2" />
             <Button variant="outline" size="icon" onClick={handleThemeToggle} aria-label="Toggle theme">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>

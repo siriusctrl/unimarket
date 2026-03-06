@@ -164,25 +164,24 @@ export const executePerpFill = (input: PerpExecutionInput): PerpExecutionResult 
 
   // Increase same-direction exposure.
   if (sameDirection) {
-    if (Math.abs(current.leverage - input.leverage) > 1e-9) {
-      throw new TradingError("LEVERAGE_MISMATCH", "Cannot increase position with a different leverage");
-    }
-
-    const requiredMargin = initialMargin(deltaAbs, input.price, current.leverage);
+    const requiredMargin = initialMargin(deltaAbs, input.price, input.leverage);
     if (input.balance < requiredMargin + feePaid) {
       throw new TradingError("INSUFFICIENT_MARGIN", "Insufficient balance for initial margin");
     }
 
     const nextAbs = currentAbs + deltaAbs;
     const nextAvg = (currentAbs * current.avgCost + deltaAbs * input.price) / nextAbs;
+    const nextMargin = current.margin + requiredMargin;
+    // Weighted-average leverage: total notional / total margin (matches Hyperliquid behavior)
+    const nextLeverage = nextMargin > 0 ? roundCurrency(nextAbs * nextAvg / nextMargin) : input.leverage;
 
     return {
       nextBalance: roundCurrency(input.balance - requiredMargin - feePaid),
       nextPosition: {
         quantity: currentQty + delta,
         avgCost: roundCurrency(nextAvg),
-        margin: roundCurrency(current.margin + requiredMargin),
-        leverage: current.leverage,
+        margin: roundCurrency(nextMargin),
+        leverage: nextLeverage,
         maintenanceMarginRatio: current.maintenanceMarginRatio,
       },
       realizedPnl: 0,

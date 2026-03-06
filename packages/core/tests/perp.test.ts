@@ -117,7 +117,7 @@ describe("perp engine", () => {
     ).toThrowError(TradingError);
   });
 
-  it("prevents increasing with different leverage", () => {
+  it("merges same-direction adds with different leverage into weighted average", () => {
     const opened = executePerpFill({
       balance: 1_000,
       side: "buy",
@@ -126,18 +126,25 @@ describe("perp engine", () => {
       leverage: 5,
       maintenanceMarginRatio: 0.05,
     });
+    // opened: 2 units @ 100, margin = 40, leverage = 5
 
-    expect(() =>
-      executePerpFill({
-        balance: opened.nextBalance,
-        position: opened.nextPosition,
-        side: "buy",
-        quantity: 1,
-        price: 100,
-        leverage: 10,
-        maintenanceMarginRatio: 0.05,
-      }),
-    ).toThrowError(TradingError);
+    const added = executePerpFill({
+      balance: opened.nextBalance,
+      position: opened.nextPosition,
+      side: "buy",
+      quantity: 1,
+      price: 100,
+      leverage: 10,
+      maintenanceMarginRatio: 0.05,
+    });
+    // added: 1 unit @ 100, new margin = 10
+    // total: 3 units @ 100, total margin = 50, effective leverage = 300/50 = 6
+
+    expect(added.nextPosition?.quantity).toBe(3);
+    expect(added.nextPosition?.avgCost).toBeCloseTo(100, 6);
+    expect(added.nextPosition?.margin).toBeCloseTo(50, 6);
+    expect(added.nextPosition?.leverage).toBeCloseTo(6, 6);
+    expect(added.nextBalance).toBeCloseTo(950, 6);
   });
 
   it("applies taker fee on perp fills", () => {

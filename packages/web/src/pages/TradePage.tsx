@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlert, ShoppingCart } from "lucide-react";
+import { createPortal } from "react-dom";
+import { CircleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { AgentPicker } from "../components/trade/AgentPicker";
@@ -7,10 +8,9 @@ import { CreateTraderCard } from "../components/trade/CreateTraderCard";
 import { MarketSearchPanel } from "../components/trade/MarketSearchPanel";
 import { PortfolioPanels } from "../components/trade/PortfolioPanels";
 import { TradeTicketCard } from "../components/trade/TradeTicketCard";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { clearAdminKey, readStoredAdminKey } from "../lib/admin";
+import { Card, CardContent } from "../components/ui/card";
+import { clearAdminKey, formatCurrency, readStoredAdminKey } from "../lib/admin";
 import {
   AdminApiError,
   createAdminApiClient,
@@ -19,12 +19,19 @@ import {
   type MarketReferenceResult,
   type PlaceOrderInput,
   type PortfolioData,
+  type PortfolioPosition,
   type QuoteData,
   type TradingConstraints,
   isAdminAuthError,
 } from "../lib/admin-api";
 
 type OrderResult = { ok: boolean; message: string } | null;
+type ClosePrefill = {
+  agentId: string;
+  market: string;
+  reference: string;
+  side: "buy" | "sell";
+} | null;
 
 const DISCOVERY_PAGE_SIZE = 20;
 
@@ -86,6 +93,7 @@ export const TradePage = () => {
   const [limitPrice, setLimitPrice] = useState("");
   const [leverage, setLeverage] = useState("1");
   const [reasoning, setReasoning] = useState("");
+  const [closePrefill, setClosePrefill] = useState<ClosePrefill>(null);
   const [submitting, setSubmitting] = useState(false);
   const [orderResult, setOrderResult] = useState<OrderResult>(null);
 
@@ -116,6 +124,13 @@ export const TradePage = () => {
     reasoning.trim() &&
     (orderType !== "limit" || limitPrice),
   );
+  const isClosePrefillActive = Boolean(
+    isPerpMarket &&
+    closePrefill?.agentId === selectedAgent &&
+    closePrefill.market === selectedMarket &&
+    closePrefill.reference === selectedAsset?.reference &&
+    closePrefill.side === orderSide,
+  );
 
   const clearSelectionState = useCallback(() => {
     setSelectedAsset(null);
@@ -126,6 +141,7 @@ export const TradePage = () => {
     setHasMoreResults(false);
     setSearchQuery("");
     setOrderResult(null);
+    setClosePrefill(null);
   }, []);
 
   const fetchAgents = useCallback(async () => {
@@ -410,6 +426,7 @@ export const TradePage = () => {
       reasoning: reasoning.trim(),
       ...(portfolio?.accountId ? { accountId: portfolio.accountId } : {}),
       ...(orderType === "limit" && limitPrice ? { limitPrice: Number(limitPrice) } : {}),
+      ...(isClosePrefillActive ? { reduceOnly: true } : {}),
       ...(isPerpMarket && Number(leverage) > 1 ? { leverage: Number(leverage) } : {}),
     };
 
@@ -422,6 +439,7 @@ export const TradePage = () => {
       setQuantity("");
       setLimitPrice("");
       setReasoning("");
+      setClosePrefill(null);
 
       const [nextPortfolio, nextQuote] = await Promise.all([
         client.getUserPortfolio(selectedAgent),
@@ -447,43 +465,58 @@ export const TradePage = () => {
     setConstraints(null);
     setQuoteLoading(true);
     setOrderResult(null);
+    setClosePrefill(null);
   };
+
+  const handleClosePosition = (position: PortfolioPosition) => {
+    setSelectedMarket(position.market);
+    setSelectedAsset({
+      reference: position.symbol,
+      name: position.symbol,
+    });
+    setOrderSide(position.quantity > 0 ? "sell" : "buy");
+    setOrderType("market");
+    setQuantity(Math.abs(position.quantity).toString());
+    setLimitPrice("");
+    setLeverage(position.leverage && position.leverage > 1 ? position.leverage.toString() : "1");
+    setReasoning("Close position");
+    setClosePrefill({
+      agentId: selectedAgent,
+      market: position.market,
+      reference: position.symbol,
+      side: position.quantity > 0 ? "sell" : "buy",
+    });
+    setOrderResult(null);
+    setQuote(null);
+    setConstraints(null);
+    setQuoteLoading(true);
+  };
+
+  const headerSlot = document.getElementById("header-actions-slot");
 
   return (
     <div className="space-y-5">
-      <Card className="animate-in fade-in-0 slide-in-from-top-1 border-primary/25 bg-card/55 backdrop-blur-xl duration-300">
-        <CardHeader className="gap-4 md:flex-row md:items-center md:justify-between md:space-y-0">
-          <div className="space-y-2">
-            <Badge variant="secondary" className="w-fit gap-1 border border-border/40">
-              <ShoppingCart className="h-3 w-3" />
-              Manual Trading
-            </Badge>
-            <CardTitle className="text-3xl font-bold tracking-tight sm:text-4xl">Trade</CardTitle>
-            <CardDescription>
-              Browse live market references, inspect quotes, and place trades on behalf of any agent or trader.
-            </CardDescription>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <AgentPicker
-              agents={agents}
-              selectedAgentId={selectedAgent}
-              selectedAgentName={selectedAgentInfo?.userName ?? null}
-              open={agentDropdownOpen}
-              dropdownRef={agentDropdownRef}
-              onToggle={() => setAgentDropdownOpen((open) => !open)}
-              onSelect={(userId) => {
-                setSelectedAgent(userId);
-                setAgentDropdownOpen(false);
-              }}
-              onCreateTrader={() => {
-                setShowCreateTrader(true);
-                setAgentDropdownOpen(false);
-              }}
-            />
-          </div>
-        </CardHeader>
-      </Card>
+      {headerSlot
+        ? createPortal(
+          <AgentPicker
+            agents={agents}
+            selectedAgentId={selectedAgent}
+            selectedAgentName={selectedAgentInfo?.userName ?? null}
+            open={agentDropdownOpen}
+            dropdownRef={agentDropdownRef}
+            onToggle={() => setAgentDropdownOpen((open) => !open)}
+            onSelect={(userId) => {
+              setSelectedAgent(userId);
+              setAgentDropdownOpen(false);
+            }}
+            onCreateTrader={() => {
+              setShowCreateTrader(true);
+              setAgentDropdownOpen(false);
+            }}
+          />,
+          headerSlot,
+        )
+        : null}
 
       <CreateTraderCard
         open={showCreateTrader}
@@ -505,6 +538,30 @@ export const TradePage = () => {
           </CardContent>
         </Card>
       ) : null}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-1.5 rounded-lg border border-border/50 bg-muted/50 p-1">
+          {markets.map((market) => (
+            <Button
+              key={market.id}
+              variant={selectedMarket === market.id ? "default" : "ghost"}
+              size="sm"
+              className="h-8 text-xs capitalize"
+              onClick={() => {
+                setSelectedMarket(market.id);
+                clearSelectionState();
+              }}
+            >
+              {market.name}
+            </Button>
+          ))}
+        </div>
+        {selectedAgentInfo ? (
+          <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-card/40 px-4 py-1.5 backdrop-blur-sm">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Balance</span>
+            <span className="font-mono text-sm font-bold tabular-nums">{formatCurrency(portfolio?.balance ?? selectedAgentInfo.balance)}</span>
+          </div>
+        ) : null}
+      </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-[1fr_420px]">
         <MarketSearchPanel
@@ -573,7 +630,7 @@ export const TradePage = () => {
             canSubmit={canSubmit}
           />
 
-          <PortfolioPanels selectedAgent={selectedAgentInfo} portfolio={portfolio} />
+          <PortfolioPanels selectedAgent={selectedAgentInfo} portfolio={portfolio} onClosePosition={handleClosePosition} />
         </div>
       </div>
     </div>
