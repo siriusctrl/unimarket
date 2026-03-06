@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../db/client.js";
 import { orders } from "../db/schema.js";
-import { eventBus } from "../events.js";
+import { eventBus } from "../platform/events.js";
 import { nowIso } from "../utils.js";
 
 type OrderRow = typeof orders.$inferSelect;

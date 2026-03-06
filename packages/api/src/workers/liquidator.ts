@@ -6,17 +6,17 @@ import {
 import type { MarketRegistry, Quote } from "@unimarket/markets";
 import { and, eq, inArray } from "drizzle-orm";
 
-import { db } from "./db/client.js";
-import { accounts, liquidations, orderExecutionParams, orders, perpPositionState, positions, trades } from "./db/schema.js";
-import { eventBus } from "./events.js";
-import { getTakerFeeRate } from "./fees.js";
+import { db } from "../db/client.js";
+import { accounts, liquidations, orderExecutionParams, orders, perpPositionState, positions, trades } from "../db/schema.js";
+import { eventBus } from "../platform/events.js";
+import { getTakerFeeRate } from "../fees.js";
 import { startPeriodicWorker } from "./periodic-worker.js";
 import {
   cancelPendingOrderInTx,
   emitOrderCancelled,
   type CancelledOrderRecord,
-} from "./services/order-cancellation.js";
-import { makeId, nowIso } from "./utils.js";
+} from "../services/order-cancellation.js";
+import { makeId, nowIso } from "../utils.js";
 
 const DEFAULT_INTERVAL_MS = 5_000;
 

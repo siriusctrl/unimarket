@@ -2,11 +2,11 @@ import { INITIAL_BALANCE, registerSchema } from "@unimarket/core";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 
-import type { AppVariables } from "../auth.js";
+import type { AppVariables } from "../platform/auth.js";
 import { db } from "../db/client.js";
 import { accounts, apiKeys, users } from "../db/schema.js";
-import { jsonError } from "../errors.js";
-import { parseJson, withErrorHandling } from "../helpers.js";
+import { jsonError } from "../platform/errors.js";
+import { parseJson, withErrorHandling } from "../platform/helpers.js";
 import { createApiKey, hashApiKey, keyPrefix, makeId, nowIso } from "../utils.js";
 
 const auth = new Hono<{ Variables: AppVariables }>();

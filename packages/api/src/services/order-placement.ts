@@ -9,9 +9,9 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../db/client.js";
 import { accounts, orderExecutionParams, orders, perpPositionState, positions, trades } from "../db/schema.js";
-import { eventBus } from "../events.js";
+import { eventBus } from "../platform/events.js";
 import { getTakerFeeRate } from "../fees.js";
-import { getFirst } from "../helpers.js";
+import { getFirst } from "../platform/helpers.js";
 import { makeId, nowIso } from "../utils.js";
 
 const DEFAULT_TRADING_CONSTRAINTS: TradingConstraints = {

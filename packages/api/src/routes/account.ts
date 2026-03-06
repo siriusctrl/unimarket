@@ -2,9 +2,9 @@ import { paginationQuerySchema } from "@unimarket/core";
 import type { MarketRegistry } from "@unimarket/markets";
 import { Hono } from "hono";
 
-import type { AppVariables } from "../auth.js";
-import { jsonError } from "../errors.js";
-import { getUserAccount, parseQuery, withErrorHandling } from "../helpers.js";
+import type { AppVariables } from "../platform/auth.js";
+import { jsonError } from "../platform/errors.js";
+import { getUserAccount, parseQuery, withErrorHandling } from "../platform/helpers.js";
 import { buildAccountPortfolioModel } from "../services/portfolio-read.js";
 import { buildTimelineEvents } from "../timeline.js";
 

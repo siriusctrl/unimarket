@@ -72,14 +72,9 @@ unimarket/
 │   │       ├── routes/        # HTTP entrypoints
 │   │       ├── services/      # Shared API orchestration + read models
 │   │       ├── db/            # Schema and SQLite setup
-│   │       ├── reconciler.ts  # Pending limit worker
-│   │       ├── settler.ts     # Resolution worker
-│   │       ├── funding-collector.ts
-│   │       ├── liquidator.ts
-│   │       ├── equity-snapshotter.ts
-│   │       ├── periodic-worker.ts
+│   │       ├── platform/      # Auth, idempotency, SSE, boundary helpers
+│   │       ├── workers/       # Background schedulers and worker entrypoints
 │   │       ├── timeline.ts    # Unified audit timeline builder
-│   │       ├── events.ts      # SSE event bus + event types
 │   │       └── index.ts       # API bootstrap
 │   └── web/
 │       └── src/
@@ -138,6 +133,12 @@ It handles:
 - worker scheduling
 - SSE event emission
 - timeline aggregation
+
+Within `packages/api/src`, the subdirectories are organized by runtime role:
+- `routes/` defines HTTP boundaries and permission checks
+- `services/` holds shared orchestration and read-model builders
+- `platform/` contains auth, idempotency, SSE, and other framework-facing boundary helpers
+- `workers/` contains background loops such as reconcile, settle, liquidation, funding collection, and equity snapshotting
 
 This package is where pure domain logic meets side effects.
 

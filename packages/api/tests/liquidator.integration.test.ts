@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 type DbModule = Awaited<typeof import("../src/db/client.js")>;
 type SchemaModule = Awaited<typeof import("../src/db/schema.js")>;
-type LiquidatorModule = Awaited<typeof import("../src/liquidator.js")>;
+type LiquidatorModule = Awaited<typeof import("../src/workers/liquidator.js")>;
 
 const dbFilePath = join(tmpdir(), `unimarket-liquidator-test-${randomUUID()}.sqlite`);
 process.env.DB_URL = `file:${dbFilePath}`;
@@ -62,7 +62,7 @@ beforeAll(async () => {
   const [dbModule, schemaModule, liquidatorModule] = await Promise.all([
     import("../src/db/client.js"),
     import("../src/db/schema.js"),
-    import("../src/liquidator.js"),
+    import("../src/workers/liquidator.js"),
   ]);
   await dbModule.migrate();
   db = dbModule.db;

@@ -35,8 +35,8 @@ let db: DbModule["db"];
 let sqlite: DbModule["sqlite"];
 let tables: SchemaModule;
 let registry: MarketRegistry;
-let reconcilePendingOrders: (typeof import("../src/reconciler.js"))["reconcilePendingOrders"];
-let recordEquitySnapshots: (typeof import("../src/equity-snapshotter.js"))["recordEquitySnapshots"];
+let reconcilePendingOrders: (typeof import("../src/workers/reconciler.js"))["reconcilePendingOrders"];
+let recordEquitySnapshots: (typeof import("../src/workers/equity-snapshotter.js"))["recordEquitySnapshots"];
 
 const quoteBySymbol: Record<string, { price: number; bid: number; ask: number }> = {
   "0x-market-fill": { price: 0.52, bid: 0.51, ask: 0.52 },
@@ -227,8 +227,8 @@ beforeAll(async () => {
     import("../src/app.js"),
     import("../src/db/client.js"),
     import("../src/db/schema.js"),
-    import("../src/reconciler.js"),
-    import("../src/equity-snapshotter.js"),
+    import("../src/workers/reconciler.js"),
+    import("../src/workers/equity-snapshotter.js"),
   ]);
 
   await dbModule.migrate();

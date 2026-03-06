@@ -2,7 +2,7 @@ import { HyperliquidAdapter, MarketRegistry, PolymarketAdapter } from "@unimarke
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 
-import { adminOnlyMiddleware, authMiddleware, type AppVariables } from "./auth.js";
+import { adminOnlyMiddleware, authMiddleware, type AppVariables } from "./platform/auth.js";
 import { createAccountRoutes } from "./routes/account.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { auth as authRoutes } from "./routes/auth.js";
@@ -12,7 +12,7 @@ import { createOrderRoutes } from "./routes/orders.js";
 import { eventsRoutes } from "./routes/events.js";
 import { positionsRoutes } from "./routes/positions.js";
 import { API_VERSION } from "./version.js";
-import { jsonError } from "./errors.js";
+import { jsonError } from "./platform/errors.js";
 
 export type CreateAppOptions = {
   registry?: MarketRegistry;

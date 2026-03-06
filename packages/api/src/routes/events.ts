@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
-import type { AppVariables } from "../auth.js";
-import { jsonError } from "../errors.js";
-import { ALL_EVENTS_SUBSCRIBER, eventBus, type SequencedTradingEvent } from "../events.js";
+import type { AppVariables } from "../platform/auth.js";
+import { jsonError } from "../platform/errors.js";
+import { ALL_EVENTS_SUBSCRIBER, eventBus, type SequencedTradingEvent } from "../platform/events.js";
 import { nowIso } from "../utils.js";
 import { API_VERSION } from "../version.js";
 

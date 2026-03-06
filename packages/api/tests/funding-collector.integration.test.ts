@@ -9,8 +9,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 type DbModule = Awaited<typeof import("../src/db/client.js")>;
 type SchemaModule = Awaited<typeof import("../src/db/schema.js")>;
-type FundingCollectorModule = Awaited<typeof import("../src/funding-collector.js")>;
-type EventsModule = Awaited<typeof import("../src/events.js")>;
+type FundingCollectorModule = Awaited<typeof import("../src/workers/funding-collector.js")>;
+type EventsModule = Awaited<typeof import("../src/platform/events.js")>;
 
 const dbFilePath = join(tmpdir(), `unimarket-funding-test-${randomUUID()}.sqlite`);
 process.env.DB_URL = `file:${dbFilePath}`;
@@ -93,8 +93,8 @@ beforeAll(async () => {
   const [dbModule, schemaModule, fundingCollectorModule, eventsModule] = await Promise.all([
     import("../src/db/client.js"),
     import("../src/db/schema.js"),
-    import("../src/funding-collector.js"),
-    import("../src/events.js"),
+    import("../src/workers/funding-collector.js"),
+    import("../src/platform/events.js"),
   ]);
   await dbModule.migrate();
   db = dbModule.db;

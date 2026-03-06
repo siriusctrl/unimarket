@@ -4,8 +4,8 @@ import type { Context } from "hono";
 import type { z } from "zod";
 
 import type { AppVariables } from "./auth.js";
-import { db } from "./db/client.js";
-import { accounts } from "./db/schema.js";
+import { db } from "../db/client.js";
+import { accounts } from "../db/schema.js";
 import { jsonError } from "./errors.js";
 import { eq } from "drizzle-orm";
 

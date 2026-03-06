@@ -80,7 +80,7 @@ Why this matters:
 Implemented shape:
 
 - `/api/admin/overview` is read-only
-- snapshot generation runs through `packages/api/src/equity-snapshotter.ts`
+- snapshot generation runs through `packages/api/src/workers/equity-snapshotter.ts`
 - snapshot cadence is controlled by `EQUITY_SNAPSHOT_INTERVAL_MS`
 
 ### 3. Shared Worker Scaffold
@@ -94,10 +94,10 @@ Problem:
 
 Current locations:
 
-- `packages/api/src/reconciler.ts`
-- `packages/api/src/settler.ts`
-- `packages/api/src/funding-collector.ts`
-- `packages/api/src/liquidator.ts`
+- `packages/api/src/workers/reconciler.ts`
+- `packages/api/src/workers/settler.ts`
+- `packages/api/src/workers/funding-collector.ts`
+- `packages/api/src/workers/liquidator.ts`
 
 Why this matters:
 
@@ -106,7 +106,7 @@ Why this matters:
 
 Implemented shape:
 
-- `packages/api/src/periodic-worker.ts`
+- `packages/api/src/workers/periodic-worker.ts`
 - reconciler, settler, funding collector, liquidator, and equity snapshotter all use the shared scaffold
 
 ### 4. Shared Timeline Contract Types
@@ -121,7 +121,7 @@ Problem:
 Current duplication exists across:
 
 - `packages/api/src/timeline.ts`
-- `packages/api/src/events.ts`
+- `packages/api/src/platform/events.ts`
 - `packages/web/src/lib/useAgentTimeline.ts`
 - `packages/web/src/components/ActivityFeed.tsx`
 

@@ -2,12 +2,12 @@ import { createJournalSchema, paginationQuerySchema } from "@unimarket/core";
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
-import type { AppVariables } from "../auth.js";
+import type { AppVariables } from "../platform/auth.js";
 import { db } from "../db/client.js";
 import { journal } from "../db/schema.js";
-import { jsonError } from "../errors.js";
-import { deserializeTags, parseJson, parseQuery, serializeTags, withErrorHandling } from "../helpers.js";
-import { checkIdempotency, storeIdempotencyResponse } from "../idempotency.js";
+import { jsonError } from "../platform/errors.js";
+import { deserializeTags, parseJson, parseQuery, serializeTags, withErrorHandling } from "../platform/helpers.js";
+import { checkIdempotency, storeIdempotencyResponse } from "../platform/idempotency.js";
 import { makeId, nowIso } from "../utils.js";
 
 const router = new Hono<{ Variables: AppVariables }>();

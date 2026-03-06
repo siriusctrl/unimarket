@@ -1,10 +1,10 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { MiddlewareHandler } from "hono";
 
-import { db } from "./db/client.js";
-import { apiKeys } from "./db/schema.js";
+import { db } from "../db/client.js";
+import { apiKeys } from "../db/schema.js";
 import { jsonError } from "./errors.js";
-import { hashApiKey } from "./utils.js";
+import { hashApiKey } from "../utils.js";
 
 export type AppVariables = {
   userId: string;

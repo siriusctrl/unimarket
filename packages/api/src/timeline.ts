@@ -4,7 +4,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "./db/client.js";
 import { fundingPayments, journal, liquidations, orders } from "./db/schema.js";
-import { deserializeTags } from "./helpers.js";
+import { deserializeTags } from "./platform/helpers.js";
 import { resolveSymbolsWithCache } from "./symbol-metadata.js";
 
 const deserializeStringArray = (raw: string): string[] => {

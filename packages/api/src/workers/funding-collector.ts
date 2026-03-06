@@ -1,11 +1,11 @@
 import type { MarketRegistry } from "@unimarket/markets";
 import { eq } from "drizzle-orm";
 
-import { db } from "./db/client.js";
-import { accounts, fundingPayments, positions } from "./db/schema.js";
-import { eventBus } from "./events.js";
+import { db } from "../db/client.js";
+import { accounts, fundingPayments, positions } from "../db/schema.js";
+import { eventBus } from "../platform/events.js";
 import { startPeriodicWorker } from "./periodic-worker.js";
-import { nowIso } from "./utils.js";
+import { nowIso } from "../utils.js";
 
 const DEFAULT_INTERVAL_MS = 3_600_000; // 1 hour
 

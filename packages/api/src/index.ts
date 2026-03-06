@@ -17,11 +17,11 @@ const bootstrap = async (): Promise<void> => {
   ] = await Promise.all([
     import("./app.js"),
     import("./db/client.js"),
-    import("./equity-snapshotter.js"),
-    import("./funding-collector.js"),
-    import("./liquidator.js"),
-    import("./reconciler.js"),
-    import("./settler.js"),
+    import("./workers/equity-snapshotter.js"),
+    import("./workers/funding-collector.js"),
+    import("./workers/liquidator.js"),
+    import("./workers/reconciler.js"),
+    import("./workers/settler.js"),
   ]);
 
   const port = Number(process.env.PORT ?? 3100);

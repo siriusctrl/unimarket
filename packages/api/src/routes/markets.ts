@@ -2,9 +2,9 @@ import { multiQuoteQuerySchema, quoteQuerySchema, searchMarketQuerySchema } from
 import { MarketAdapterError, type MarketRegistry, type TradingConstraints } from "@unimarket/markets";
 import { Hono } from "hono";
 
-import type { AppVariables } from "../auth.js";
-import { jsonError } from "../errors.js";
-import { parseQuery, withErrorHandling } from "../helpers.js";
+import type { AppVariables } from "../platform/auth.js";
+import { jsonError } from "../platform/errors.js";
+import { parseQuery, withErrorHandling } from "../platform/helpers.js";
 
 export const createMarketRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();

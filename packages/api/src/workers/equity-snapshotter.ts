@@ -1,7 +1,7 @@
 import type { MarketRegistry } from "@unimarket/markets";
 
 import { startPeriodicWorker } from "./periodic-worker.js";
-import { buildAdminOverviewModel, recordEquitySnapshotsFromOverview } from "./services/admin-overview.js";
+import { buildAdminOverviewModel, recordEquitySnapshotsFromOverview } from "../services/admin-overview.js";
 
 const DEFAULT_INTERVAL_MS = 300_000;
 

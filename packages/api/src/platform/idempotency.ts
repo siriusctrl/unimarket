@@ -4,10 +4,10 @@ import { and, eq } from "drizzle-orm";
 import type { Context } from "hono";
 
 import type { AppVariables } from "./auth.js";
-import { db } from "./db/client.js";
-import { idempotencyKeys } from "./db/schema.js";
+import { db } from "../db/client.js";
+import { idempotencyKeys } from "../db/schema.js";
 import { jsonError } from "./errors.js";
-import { makeId, nowIso } from "./utils.js";
+import { makeId, nowIso } from "../utils.js";
 
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
