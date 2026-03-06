@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createAdminApiClient, isAdminAuthError, type EquityHistoryResponse } from "./admin-api";
 
@@ -14,12 +14,18 @@ export const useEquityHistory = ({
     const [data, setData] = useState<EquityHistoryResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const onAuthErrorRef = useRef(onAuthError);
+
+    onAuthErrorRef.current = onAuthError;
 
     const fetchHistory = useCallback(async () => {
         if (!adminKey) return;
         setLoading(true);
         try {
-            const client = createAdminApiClient({ adminKey, onAuthError });
+            const client = createAdminApiClient({
+                adminKey,
+                onAuthError: () => onAuthErrorRef.current?.(),
+            });
             const payload = await client.getEquityHistory(range);
             setData(payload);
             setError(null);
@@ -31,7 +37,7 @@ export const useEquityHistory = ({
         } finally {
             setLoading(false);
         }
-    }, [adminKey, onAuthError, range]);
+    }, [adminKey, range]);
 
     useEffect(() => {
         void fetchHistory();

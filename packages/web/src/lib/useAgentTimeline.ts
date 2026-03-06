@@ -1,5 +1,5 @@
 import type { TimelineEventRecord } from "@unimarket/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createAdminApiClient, isAdminAuthError } from "./admin-api";
 
@@ -21,6 +21,9 @@ export const useAgentTimeline = ({
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
+    const onAuthErrorRef = useRef(onAuthError);
+
+    onAuthErrorRef.current = onAuthError;
 
     const fetchPage = useCallback(async (pageNum: number) => {
         if (!userId || !adminKey) return;
@@ -28,7 +31,10 @@ export const useAgentTimeline = ({
         setLoading(true);
         try {
             const offset = pageNum * PAGE_SIZE;
-            const client = createAdminApiClient({ adminKey, onAuthError });
+            const client = createAdminApiClient({
+                adminKey,
+                onAuthError: () => onAuthErrorRef.current?.(),
+            });
             const payload = await client.getUserTimeline(userId, { limit: PAGE_SIZE, offset });
             const newEvents: TimelineEvent[] = payload.events ?? [];
 
@@ -43,7 +49,7 @@ export const useAgentTimeline = ({
         } finally {
             setLoading(false);
         }
-    }, [adminKey, onAuthError, userId]);
+    }, [adminKey, userId]);
 
     // Reset pagination when switching to a different agent.
     useEffect(() => {
@@ -61,6 +67,7 @@ export const useAgentTimeline = ({
     const goToPage = useCallback((p: number) => setPage(p), []);
     const nextPage = useCallback(() => setPage((p) => p + 1), []);
     const prevPage = useCallback(() => setPage((p) => Math.max(0, p - 1)), []);
+    const refresh = useCallback(() => fetchPage(page), [fetchPage, page]);
 
-    return { events, loading, error, page, hasMore, goToPage, nextPage, prevPage };
+    return { events, loading, error, page, hasMore, goToPage, nextPage, prevPage, refresh };
 };

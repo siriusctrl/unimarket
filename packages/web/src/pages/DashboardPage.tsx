@@ -53,7 +53,64 @@ export const DashboardPage = () => {
   };
 
   const { overview, error, loading, refresh } = useAdminOverview({ adminKey, onAuthError: handleAuthError });
-  const { data: historyData, loading: historyLoading } = useEquityHistory({ adminKey, range, onAuthError: handleAuthError });
+  const { data: historyData, loading: historyLoading, refresh: refreshHistory } = useEquityHistory({ adminKey, range, onAuthError: handleAuthError });
+
+  const handleRefresh = async () => {
+    await Promise.all([refresh(), refreshHistory()]);
+  };
+
+  const chartSeries = useMemo(() => {
+    const historicalSeries = historyData?.series ?? [];
+    const liveAgents = overview?.agents ?? [];
+
+    if (historicalSeries.length === 0 && liveAgents.length === 0) {
+      return [];
+    }
+
+    const historicalByUserId = new Map(historicalSeries.map((series) => [series.userId, series]));
+    const mergedSeries = liveAgents.map((agent) => {
+      const existing = historicalByUserId.get(agent.userId);
+      const snapshots = [...(existing?.snapshots ?? [])];
+
+      if (overview?.generatedAt) {
+        const liveSnapshot = {
+          snapshotAt: overview.generatedAt,
+          equity: agent.totals.equity,
+          balance: agent.balance,
+          marketValue: agent.totals.marketValue,
+          unrealizedPnl: agent.totals.unrealizedPnl,
+        };
+        const lastSnapshot = snapshots[snapshots.length - 1];
+        const sameTimestamp = lastSnapshot?.snapshotAt === liveSnapshot.snapshotAt;
+        const sameValues = Boolean(
+          lastSnapshot
+            && lastSnapshot.equity === liveSnapshot.equity
+            && lastSnapshot.balance === liveSnapshot.balance
+            && lastSnapshot.marketValue === liveSnapshot.marketValue
+            && lastSnapshot.unrealizedPnl === liveSnapshot.unrealizedPnl,
+        );
+
+        if (!sameTimestamp && (!sameValues || snapshots.length === 0)) {
+          snapshots.push(liveSnapshot);
+        }
+      }
+
+      return {
+        userId: agent.userId,
+        userName: agent.userName,
+        snapshots,
+      };
+    });
+
+    const seenUserIds = new Set(mergedSeries.map((series) => series.userId));
+    for (const series of historicalSeries) {
+      if (!seenUserIds.has(series.userId)) {
+        mergedSeries.push(series);
+      }
+    }
+
+    return mergedSeries.filter((series) => series.snapshots.length > 0);
+  }, [historyData, overview]);
 
   const generatedAtLabel = useMemo(() => {
     if (!overview?.generatedAt) return "-";
@@ -62,13 +119,13 @@ export const DashboardPage = () => {
 
   /* ----- build chart data from equity history ----- */
   const { chartData, agentNames, agentColors } = useMemo(() => {
-    if (!historyData || historyData.series.length === 0) {
+    if (chartSeries.length === 0) {
       return { chartData: [], agentNames: [] as string[], agentColors: {} as Record<string, string> };
     }
 
     // Collect all unique timestamps across all agents
     const timestampSet = new Set<string>();
-    for (const agent of historyData.series) {
+    for (const agent of chartSeries) {
       for (const snap of agent.snapshots) {
         timestampSet.add(snap.snapshotAt);
       }
@@ -76,16 +133,16 @@ export const DashboardPage = () => {
     const allTimestamps = [...timestampSet].sort();
 
     // Build name list + color map
-    const names = historyData.series.map((s) => s.userName);
+    const names = chartSeries.map((s) => s.userName);
     const colors: Record<string, string> = {};
-    historyData.series.forEach((s, i) => {
+    chartSeries.forEach((s, i) => {
       colors[s.userName] = chartPalette[i % chartPalette.length];
     });
 
     // For return mode, we need the initial equity for each agent
     const initialEquity: Record<string, number> = {};
     if (chartMode === "return") {
-      for (const agent of historyData.series) {
+      for (const agent of chartSeries) {
         if (agent.snapshots.length > 0) {
           initialEquity[agent.userName] = agent.snapshots[0].equity;
         }
@@ -94,7 +151,7 @@ export const DashboardPage = () => {
 
     // Build per-timestamp map for each agent (for fast lookup)
     const agentDataMap = new Map<string, Map<string, number>>();
-    for (const agent of historyData.series) {
+    for (const agent of chartSeries) {
       const map = new Map<string, number>();
       for (const snap of agent.snapshots) {
         const value =
@@ -113,7 +170,7 @@ export const DashboardPage = () => {
       const row: Record<string, string | number> = {
         time: new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
       };
-      for (const agent of historyData.series) {
+      for (const agent of chartSeries) {
         const val = agentDataMap.get(agent.userName)?.get(ts);
         if (val !== undefined) row[agent.userName] = val;
       }
@@ -121,7 +178,7 @@ export const DashboardPage = () => {
     });
 
     return { chartData: data, agentNames: names, agentColors: colors };
-  }, [historyData, chartMode]);
+  }, [chartMode, chartSeries]);
 
   // Compute Y-axis domain from selected agents with symmetric padding
   const yDomain = useMemo((): [number, number] | undefined => {
@@ -234,8 +291,8 @@ export const DashboardPage = () => {
               <p className="font-semibold uppercase tracking-wide">Last snapshot</p>
               <p>{generatedAtLabel}</p>
             </div>
-            <Button type="button" onClick={refresh} disabled={loading} className="gap-2">
-              <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            <Button type="button" onClick={() => void handleRefresh()} disabled={loading || historyLoading} className="gap-2">
+              <RefreshCw className={loading || historyLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               Refresh
             </Button>
           </div>

@@ -46,7 +46,12 @@ export const AgentDetailPage = () => {
     hasMore,
     nextPage,
     prevPage,
+    refresh: refreshTimeline,
   } = useAgentTimeline({ userId: id, adminKey, onAuthError: handleAuthError });
+
+  const handleRefresh = async () => {
+    await Promise.all([refresh(), refreshTimeline()]);
+  };
 
   if (loading && !overview) {
     return <LoadingState label="Loading agent snapshot..." />;
@@ -73,8 +78,8 @@ export const AgentDetailPage = () => {
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
-        <Button type="button" onClick={refresh} disabled={loading} className="gap-2">
-          <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+        <Button type="button" onClick={() => void handleRefresh()} disabled={loading || timelineLoading} className="gap-2">
+          <RefreshCw className={loading || timelineLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           Refresh
         </Button>
       </div>
