@@ -15,13 +15,15 @@ const adapter: MarketAdapter = {
 };
 
 describe("MarketRegistry", () => {
-  it("registers and lists markets", () => {
+  it("registers, gets, and lists markets", () => {
     const registry = new MarketRegistry();
     registry.register(adapter);
 
     const markets = registry.list();
     expect(markets).toHaveLength(1);
     expect(markets[0]).toMatchObject({ id: "mock", referenceFormat: "id" });
+    expect(registry.get("mock")).toBe(adapter);
+    expect(registry.get("missing")).toBeUndefined();
   });
 
   it("rejects duplicate adapter registration", () => {

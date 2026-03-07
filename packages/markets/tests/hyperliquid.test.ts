@@ -198,4 +198,154 @@ describe("HyperliquidAdapter", () => {
     expect(btcFunding.rate).toBe(0.0001);
     expect(btcFunding.nextFundingAt).toBe(new Date(1_700_000_000_000).toISOString());
   });
+
+  it("sorts alphabetically for query searches and tolerates optional mids failures", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "allMids") throw new Error("mid fetch failed");
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const adapter = makeAdapter();
+    const results = await adapter.search("o", { limit: 10, offset: 0 });
+
+    expect(results.map((row) => row.reference)).toEqual(["DOGE", "SOL"]);
+    expect(results.every((row) => row.price === undefined)).toBe(true);
+  });
+
+  it("rejects empty references and invalid meta or l2Book payloads", async () => {
+    const metaSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse({ universe: null });
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const adapter = makeAdapter();
+    await expect(adapter.normalizeReference("   ")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "SYMBOL_NOT_FOUND",
+    });
+    await expect(adapter.getTradingConstraints("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
+    expect(metaSpy).toHaveBeenCalledTimes(1);
+
+    metaSpy.mockReset();
+    metaSpy.mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "l2Book") return jsonResponse({ levels: null });
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    await expect(adapter.getOrderbook("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
+  });
+
+  it("supports one-sided quotes and filters invalid orderbook levels", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "l2Book" && body.coin === "BTC") {
+        return jsonResponse({
+          levels: [
+            [],
+            [
+              { px: "101", sz: "2", n: 1 },
+              { px: "bad", sz: "5", n: 1 },
+              { px: "102", sz: "1.5", n: 1 },
+            ],
+          ],
+        });
+      }
+      if (body.type === "l2Book" && body.coin === "ETH") {
+        return jsonResponse({
+          levels: [
+            [
+              { px: "99", sz: "1", n: 1 },
+              { px: "oops", sz: "2", n: 1 },
+              { px: "100", sz: "3", n: 1 },
+            ],
+            [{ px: "105", sz: "bad", n: 1 }],
+          ],
+        });
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const adapter = makeAdapter();
+    const quote = await adapter.getQuote("BTC");
+    const book = await adapter.getOrderbook("ETH");
+
+    expect(quote.price).toBe(101);
+    expect(quote.bid).toBeUndefined();
+    expect(quote.ask).toBe(101);
+    expect(book.bids.map((level) => level.price)).toEqual([100, 99]);
+    expect(book.asks).toEqual([]);
+  });
+
+  it("rejects quotes when no usable l2Book prices are available", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "l2Book") {
+        return jsonResponse({
+          levels: [[{ px: "bad", sz: "1", n: 1 }], [{ px: "bad", sz: "2", n: 1 }]],
+        });
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const adapter = makeAdapter();
+    await expect(adapter.getQuote("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "SYMBOL_NOT_FOUND",
+    });
+  });
+
+  it("supports legacy funding payloads and validates malformed funding data", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "predictedFundings") {
+        return jsonResponse([["HlPerp", { coin: "ETH", fundingRate: "0.0002", nextFundingTime: "1700000000" }]]);
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const legacyAdapter = makeAdapter();
+    const legacyFunding = await legacyAdapter.getFundingRate("ETH");
+    expect(legacyFunding.rate).toBe(0.0002);
+    expect(legacyFunding.nextFundingAt).toBe(new Date(1_700_000_000_000).toISOString());
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "predictedFundings") {
+        return jsonResponse([["BTC", [["HlPerp", { fundingRate: "bad", nextFundingTime: "1700000000" }]]]]);
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const invalidRateAdapter = makeAdapter();
+    await expect(invalidRateAdapter.getFundingRate("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
+
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "predictedFundings") {
+        return jsonResponse([["BTC", [["HlPerp", { fundingRate: "0.0001", nextFundingTime: "bad" }]]]]);
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    const invalidTimeAdapter = makeAdapter();
+    await expect(invalidTimeAdapter.getFundingRate("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
+  });
 });

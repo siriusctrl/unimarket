@@ -173,6 +173,189 @@ describe("perp engine", () => {
     expect(closed.feePaid).toBe(2);
     expect(closed.nextBalance).toBe(996);
   });
+
+  it("rejects invalid execution inputs", () => {
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        side: "buy",
+        quantity: 0,
+        price: 100,
+        leverage: 5,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        side: "buy",
+        quantity: 1,
+        price: 0,
+        leverage: 5,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 0,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 5,
+        maintenanceMarginRatio: 1,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 5,
+        maintenanceMarginRatio: 0.05,
+        takerFeeRate: Number.NaN,
+      }),
+    ).toThrowError(TradingError);
+  });
+
+  it("rejects invalid positions and invalid reduce-only orders", () => {
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        position: {
+          quantity: 0,
+          avgCost: 100,
+          margin: 10,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "sell",
+        quantity: 1,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        position: {
+          quantity: 2,
+          avgCost: 100,
+          margin: -1,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "sell",
+        quantity: 1,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        position: {
+          quantity: 2,
+          avgCost: 100,
+          margin: 20,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+        reduceOnly: true,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 100,
+        position: {
+          quantity: 2,
+          avgCost: 100,
+          margin: 20,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "sell",
+        quantity: 3,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+        reduceOnly: true,
+      }),
+    ).toThrowError(TradingError);
+  });
+
+  it("throws when balance is insufficient for opening, adding, or flipping", () => {
+    expect(() =>
+      executePerpFill({
+        balance: 5,
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 5,
+        position: {
+          quantity: 1,
+          avgCost: 100,
+          margin: 10,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "buy",
+        quantity: 1,
+        price: 100,
+        leverage: 10,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+
+    expect(() =>
+      executePerpFill({
+        balance: 0,
+        position: {
+          quantity: 1,
+          avgCost: 100,
+          margin: 1,
+          leverage: 10,
+          maintenanceMarginRatio: 0.05,
+        },
+        side: "sell",
+        quantity: 5,
+        price: 1,
+        leverage: 1,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toThrowError(TradingError);
+  });
 });
 
 describe("perp metrics", () => {
@@ -206,5 +389,34 @@ describe("perp metrics", () => {
 
     expect(longLiq).toBeCloseTo(94.736842, 6);
     expect(shortLiq).toBeCloseTo(104.761905, 6);
+  });
+
+  it("returns null liquidation price for flat or invalid denominator positions", () => {
+    expect(
+      calculatePerpLiquidationPrice({
+        quantity: 0,
+        avgCost: 100,
+        margin: 20,
+        maintenanceMarginRatio: 0.05,
+      }),
+    ).toBeNull();
+
+    expect(
+      calculatePerpLiquidationPrice({
+        quantity: 2,
+        avgCost: 100,
+        margin: 20,
+        maintenanceMarginRatio: 1,
+      }),
+    ).toBeNull();
+
+    expect(
+      calculatePerpLiquidationPrice({
+        quantity: -2,
+        avgCost: 100,
+        margin: 20,
+        maintenanceMarginRatio: -1,
+      }),
+    ).toBeNull();
   });
 });
