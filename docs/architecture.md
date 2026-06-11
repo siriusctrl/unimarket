@@ -152,7 +152,7 @@ It is intentionally thin:
 - centralizes authenticated admin requests in a small API client layer
 - renders portfolio, market, and timeline state
 - keeps visible workflows focused on observation, exposure review, and audit timelines
-- leaves order placement to agent/user APIs or explicit admin scripts instead of dashboard order tickets
+- leaves order placement to agent/user APIs instead of dashboard order tickets or admin proxy orders
 - does not reimplement trading logic in the browser
 
 ## Market Capability Model

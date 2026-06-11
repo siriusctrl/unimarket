@@ -2133,7 +2133,7 @@ describe("api integration", () => {
     expect(hasUniqueIndex).toBe(true);
   });
 
-  it("covers admin trader creation, portfolio views, and idempotent order placement", async () => {
+  it("covers admin trader creation, portfolio views, and rejects admin order placement", async () => {
     const createTraderResponse = await authedJson("/api/admin/traders", "admin_test_key", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -2175,137 +2175,21 @@ describe("api integration", () => {
     expect(initialPortfolioPayload.recentOrders).toEqual([]);
     expect(initialPortfolioPayload.valuation.status).toBe("complete");
 
-    const mismatchedAccountOrder = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
+    const adminOrderAttempt = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        accountId: "acc_wrong_target",
+        accountId: createdTrader.accountId,
         market: "polymarket",
         reference: "0x-market-fill",
         side: "buy",
         type: "market",
         quantity: 1,
-        reasoning: "mismatched account id should be rejected",
+        reasoning: "admin order placement should not exist",
       }),
     });
-    expect(mismatchedAccountOrder.status).toBe(404);
-    expect((await mismatchedAccountOrder.json()).error.code).toBe("ACCOUNT_NOT_FOUND");
-
-    const initialAdminOrder = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": "admin-order-idem-1",
-      },
-      body: JSON.stringify({
-        accountId: createdTrader.accountId,
-        market: "polymarket",
-        reference: "alias-fill",
-        side: "buy",
-        type: "market",
-        quantity: 2,
-        reasoning: "admin dashboard test order",
-      }),
-    });
-    expect(initialAdminOrder.status).toBe(201);
-    const initialAdminOrderPayload = await initialAdminOrder.json() as {
-      id: string;
-      symbol: string;
-      status: string;
-      filledPrice: number;
-    };
-    expect(initialAdminOrderPayload.symbol).toBe("0x-market-fill");
-    expect(initialAdminOrderPayload.status).toBe("filled");
-    expect(initialAdminOrderPayload.filledPrice).toBe(0.52);
-
-    const replayedAdminOrder = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": "admin-order-idem-1",
-      },
-      body: JSON.stringify({
-        accountId: createdTrader.accountId,
-        market: "polymarket",
-        reference: "alias-fill",
-        side: "buy",
-        type: "market",
-        quantity: 2,
-        reasoning: "admin dashboard test order",
-      }),
-    });
-    expect(replayedAdminOrder.status).toBe(201);
-    expect(replayedAdminOrder.headers.get("x-idempotent-replay")).toBe("true");
-    const replayedAdminOrderPayload = await replayedAdminOrder.json() as { id: string };
-    expect(replayedAdminOrderPayload.id).toBe(initialAdminOrderPayload.id);
-
-    const conflictingReplay = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": "admin-order-idem-1",
-      },
-      body: JSON.stringify({
-        accountId: createdTrader.accountId,
-        market: "polymarket",
-        reference: "alias-fill",
-        side: "buy",
-        type: "market",
-        quantity: 3,
-        reasoning: "same key different payload should conflict",
-      }),
-    });
-    expect(conflictingReplay.status).toBe(409);
-    expect((await conflictingReplay.json()).error.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
-
-    const orderRows = await db
-      .select()
-      .from(tables.orders)
-      .where(eq(tables.orders.accountId, createdTrader.accountId))
-      .all();
-    const tradeRows = await db
-      .select()
-      .from(tables.trades)
-      .where(eq(tables.trades.accountId, createdTrader.accountId))
-      .all();
-    expect(orderRows).toHaveLength(1);
-    expect(tradeRows).toHaveLength(1);
-
-    const filledExecutionParams = await db
-      .select()
-      .from(tables.orderExecutionParams)
-      .where(eq(tables.orderExecutionParams.orderId, initialAdminOrderPayload.id))
-      .all();
-    expect(filledExecutionParams).toHaveLength(1);
-    expect(filledExecutionParams[0]?.leverage).toBe(1);
-    expect(filledExecutionParams[0]?.reduceOnly).toBe(false);
-
-    const updatedPortfolioResponse = await authedJson(
-      `/api/admin/users/${createdTrader.userId}/portfolio`,
-      "admin_test_key",
-    );
-    expect(updatedPortfolioResponse.status).toBe(200);
-    const updatedPortfolioPayload = await updatedPortfolioResponse.json() as {
-      openOrders: Array<{ id: string; symbol: string; status: string }>;
-      positions: Array<{ symbol: string; quantity: number; currentPrice: number | null }>;
-      recentOrders: Array<{ id: string; symbol: string; status: string }>;
-      balance: number;
-      valuation: { status: string };
-    };
-    expect(updatedPortfolioPayload.openOrders).toEqual([]);
-    expect(updatedPortfolioPayload.positions).toHaveLength(1);
-    expect(updatedPortfolioPayload.positions[0]).toMatchObject({
-      symbol: "0x-market-fill",
-      quantity: 2,
-      currentPrice: 0.52,
-    });
-    expect(updatedPortfolioPayload.recentOrders[0]).toMatchObject({
-      id: initialAdminOrderPayload.id,
-      symbol: "0x-market-fill",
-      status: "filled",
-    });
-    expect(updatedPortfolioPayload.balance).toBeCloseTo(INITIAL_BALANCE - 1.04, 6);
-    expect(updatedPortfolioPayload.valuation.status).toBe("complete");
+    expect(adminOrderAttempt.status).toBe(404);
+    expect((await adminOrderAttempt.json()).error.code).toBe("NOT_FOUND");
 
     const adminNormalizeSpy = vi.spyOn(polymarketAdapter, "normalizeReference").mockImplementation(async (reference) => {
       if (reference === "missing-trades-symbol") {
@@ -2320,48 +2204,6 @@ describe("api integration", () => {
     expect(invalidSymbolTrades.status).toBe(404);
     expect((await invalidSymbolTrades.json()).error.code).toBe("SYMBOL_NOT_FOUND");
     adminNormalizeSpy.mockRestore();
-
-    const pendingAdminOrder = await authedJson(`/api/admin/users/${createdTrader.userId}/orders`, "admin_test_key", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        accountId: createdTrader.accountId,
-        market: "polymarket",
-        reference: "0x-pending",
-        side: "buy",
-        type: "limit",
-        quantity: 1,
-        limitPrice: 0.5,
-        reasoning: "admin pending order should persist execution params",
-      }),
-    });
-    expect(pendingAdminOrder.status).toBe(201);
-    const pendingAdminOrderPayload = await pendingAdminOrder.json() as { id: string; status: string };
-    expect(pendingAdminOrderPayload.status).toBe("pending");
-
-    const pendingExecutionParams = await db
-      .select()
-      .from(tables.orderExecutionParams)
-      .where(eq(tables.orderExecutionParams.orderId, pendingAdminOrderPayload.id))
-      .all();
-    expect(pendingExecutionParams).toHaveLength(1);
-    expect(pendingExecutionParams[0]?.leverage).toBe(1);
-    expect(pendingExecutionParams[0]?.reduceOnly).toBe(false);
-
-    const pendingPortfolioResponse = await authedJson(
-      `/api/admin/users/${createdTrader.userId}/portfolio`,
-      "admin_test_key",
-    );
-    expect(pendingPortfolioResponse.status).toBe(200);
-    const pendingPortfolioPayload = await pendingPortfolioResponse.json() as {
-      openOrders: Array<{ id: string; symbol: string; status: string }>;
-    };
-    expect(pendingPortfolioPayload.openOrders).toHaveLength(1);
-    expect(pendingPortfolioPayload.openOrders[0]).toMatchObject({
-      id: pendingAdminOrderPayload.id,
-      symbol: "0x-pending",
-      status: "pending",
-    });
   });
 
   it("keeps admin overview read-only and records equity snapshots via the worker service", async () => {

@@ -1,6 +1,6 @@
 ---
 name: unimarket
-description: Multi-market paper trading workflow for agents using the Unimarket REST API. Use when Codex needs to register a user, discover markets dynamically, inspect quotes, orderbooks, price history, funding, or resolution data, place or cancel paper orders, review account state, write journal entries, or consume SSE events against Unimarket.
+description: Agent-run multi-market paper trading workflow using the Unimarket REST API. Use when Codex needs to register an agent user, discover markets dynamically, inspect quotes, orderbooks, price history, funding, or resolution data, place or cancel paper orders with the agent/user API key, review account state, write journal entries, or consume SSE events against Unimarket. Admin credentials and dashboards are for setup, observation, and review, not proxy order placement.
 ---
 
 # Unimarket
@@ -54,6 +54,7 @@ Authentication:
 
 - Treat the web dashboard as an operator review console for humans, not as the primary trading surface.
 - Agents should trade through the API and helper script; humans should use the dashboard to inspect exposure, valuation health, PnL, funding/liquidation events, and audit timelines.
+- Admin credentials are for setup and observation, not proxy order placement. Order writes should use the agent/user API key that owns the account.
 - Do not reintroduce manual buy/sell order tickets, market discovery panels, or human-first trading workflows into the dashboard unless explicitly requested as a new product direction.
 - Preserve the established visual direction when touching the web UI: neutral graphite surfaces, moss/eucalyptus primary accents, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, neon glows, washed-out gray-green, and dirty yellow/olive casts.
 - Keep reasoning and journal/audit context prominent. The UI should make it easy to understand what agents did and why.

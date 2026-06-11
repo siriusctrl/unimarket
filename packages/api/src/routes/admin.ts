@@ -2,7 +2,6 @@ import {
   adminAmountSchema,
   INITIAL_BALANCE,
   paginationQuerySchema,
-  placeOrderSchema,
   registerSchema,
   symbolTradesQuerySchema,
 } from "@unimarket/core";
@@ -12,7 +11,7 @@ import { Hono } from "hono";
 
 import type { AppVariables } from "../platform/auth.js";
 import { db } from "../db/client.js";
-import { accounts, journal, trades, users } from "../db/schema.js";
+import { accounts, trades, users } from "../db/schema.js";
 import { jsonError } from "../platform/errors.js";
 import {
   getUserAccountScope,
@@ -21,17 +20,14 @@ import {
   requireUserRecord,
   withErrorHandling,
 } from "../platform/helpers.js";
-import { beginIdempotentRequest, storeIdempotentJsonResponse } from "../platform/idempotency.js";
 import { buildAdminOverviewModel } from "../services/admin-overview.js";
 import { buildEquityHistoryModel } from "../services/equity-history.js";
-import { createOrderPlacementService } from "../services/order-placement.js";
 import { buildAccountPortfolioModel, presentAccountPortfolioModel } from "../services/portfolio-read.js";
 import { buildTimelineEvents } from "../timeline.js";
 import { makeId, nowIso } from "../utils.js";
 
 export const createAdminRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();
-  const { placeOrderForAccount } = createOrderPlacementService(registry);
 
   const adjustUserBalance = async (
     userId: string,
@@ -188,38 +184,6 @@ export const createAdminRoutes = (registry: MarketRegistry) => {
     }),
   );
 
-  // ─── POST /users/:id/orders — Admin places order on behalf of a user ───────
-
-  router.post(
-    "/users/:id/orders",
-    withErrorHandling(async (c) => {
-      const userId = c.req.param("id");
-      const userResult = await requireUserRecord(c, userId);
-      if (!userResult.success) return userResult.response;
-
-      const parsed = await parseJson(c, placeOrderSchema);
-      if (!parsed.success) return parsed.response;
-
-      const accountScope = await getUserAccountScope(userId, parsed.data.accountId);
-      if (!accountScope.account) {
-        return jsonError(c, 404, "ACCOUNT_NOT_FOUND", "Account not found");
-      }
-
-      const adminUserId = c.get("userId");
-      const idempotency = await beginIdempotentRequest(c, adminUserId, { targetUserId: userId, ...parsed.data });
-      if (idempotency.kind === "response") {
-        return idempotency.response;
-      }
-      const placement = await placeOrderForAccount({ account: accountScope.account, order: parsed.data });
-      if (placement.kind === "error") {
-        return jsonError(c, placement.status, placement.code, placement.message);
-      }
-
-      const response = c.json(placement.order, 201);
-      await storeIdempotentJsonResponse(idempotency.candidate, response);
-      return response;
-    }),
-  );
   // ─── GET /users/:id/symbol-trades — Per-symbol trade history for charts ─────
 
   router.get(

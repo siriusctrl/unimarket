@@ -79,7 +79,7 @@ All state-changing order flows follow the same broad structure.
 8. Persist resulting account, order, trade, and position state.
 9. Emit SSE events and expose the result through timeline and portfolio reads.
 
-User and admin order entry ultimately run the same trading engine logic. Admin order placement is an operator convenience layer, not a separate accounting model.
+Agent/user order entry runs the trading engine logic. Admin APIs do not place orders on behalf of users; operators observe and fund accounts while agent-owned credentials submit the state-changing order writes.
 
 ## Execution Semantics
 
@@ -337,7 +337,7 @@ unimarket preserves the decision trace across several layers.
 
 ### Required reasoning
 
-User-initiated and admin-initiated writes require `reasoning`.
+Agent/user-initiated writes require `reasoning`. Admin credentials are for setup and observation, not proxy order placement.
 System workers also persist readable synthetic reasoning for actions such as settlement and liquidation.
 
 ### Database records

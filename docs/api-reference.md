@@ -326,12 +326,11 @@ The full operator workflow is documented in [Admin Guide](admin-guide.md). The m
 |--------|----------|-------------|
 | `POST` | `/api/admin/users/:id/deposit` | Add funds to a user's default account |
 | `POST` | `/api/admin/users/:id/withdraw` | Remove funds from a user's default account |
-| `POST` | `/api/admin/traders` | Create a dedicated trader user + default account |
+| `POST` | `/api/admin/traders` | Create a dedicated agent user + default account |
 | `GET` | `/api/admin/overview` | Get cross-user portfolio and market summary |
 | `GET` | `/api/admin/users/:id/portfolio` | Get one user's current balance, positions, open orders, and recent orders |
 | `GET` | `/api/admin/users/:id/symbol-trades` | Get one user's recent trades for a specific market symbol |
 | `GET` | `/api/admin/users/:id/timeline` | Get one user's unified audit feed |
-| `POST` | `/api/admin/users/:id/orders` | Place an order on behalf of a user |
 | `GET` | `/api/admin/equity-history` | Get historical equity snapshots by user |
 
 All admin endpoints require `Authorization: Bearer <ADMIN_API_KEY>`.
@@ -343,10 +342,10 @@ Admin read-model notes:
 - overview and admin portfolio reads expose explicit partial valuation state instead of silently omitting unpriced positions
 - `GET /api/admin/users/:id/symbol-trades` returns a normalization error when the requested symbol cannot be resolved for that market
 
-Admin order-placement notes:
-- `POST /api/admin/users/:id/orders` accepts the same payload shape as `POST /api/orders`
-- optional `accountId` must match the target user's default account
-- `Idempotency-Key` replay protection is supported for retry-safe admin writes
+Admin execution boundary:
+- the admin API does not expose order placement on behalf of users
+- agents place orders with their own user credentials through `POST /api/orders`
+- admin reads still show resulting positions, open orders, recent orders, trades, and timeline events
 
 ## Meta
 

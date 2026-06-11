@@ -14,12 +14,6 @@ const loadRoutes = async (options?: {
   }>;
   allUsers?: Array<{ id: string; name: string }>;
   parseJsonResult?: { success: true; data: Record<string, unknown> } | { success: false; response: Response };
-  idempotencyResult?:
-    | { kind: "candidate"; candidate: Record<string, unknown> | null }
-    | { kind: "response"; response: Response };
-  placement?:
-    | { kind: "filled" | "pending"; order: Record<string, unknown> }
-    | { kind: "error"; status: 400 | 404; code: string; message: string };
 }) => {
   vi.resetModules();
 
@@ -34,17 +28,10 @@ const loadRoutes = async (options?: {
   const parseJson = vi.fn().mockResolvedValue(
     options?.parseJsonResult ?? {
       success: true,
-      data: { market: "spot", reference: "YES", side: "buy", type: "market", quantity: 1, reasoning: "admin" },
+      data: { amount: 1 },
     },
   );
   const parseQuery = vi.fn(() => ({ success: true, data: { limit: 20, offset: 0 } }));
-  const beginIdempotentRequest = vi.fn().mockResolvedValue(
-    options?.idempotencyResult ?? { kind: "candidate", candidate: { id: "idem_1" } },
-  );
-  const storeIdempotentJsonResponse = vi.fn().mockResolvedValue(undefined);
-  const placeOrderForAccount = vi.fn().mockResolvedValue(
-    options?.placement ?? { kind: "error", status: 400, code: "INVALID_INPUT", message: "bad order" },
-  );
   const buildEquityHistoryModel = vi.fn().mockResolvedValue({
     range: "bad",
     series: [
@@ -117,10 +104,8 @@ const loadRoutes = async (options?: {
     jsonError: (_c: unknown, status: number, code: string, message: string) =>
       new Response(JSON.stringify({ error: { code, message } }), { status, headers: { "content-type": "application/json" } }),
   }));
-  vi.doMock("../src/platform/idempotency.js", () => ({ beginIdempotentRequest, storeIdempotentJsonResponse }));
   vi.doMock("../src/services/admin-overview.js", () => ({ buildAdminOverviewModel: vi.fn().mockResolvedValue({}) }));
   vi.doMock("../src/services/equity-history.js", () => ({ buildEquityHistoryModel }));
-  vi.doMock("../src/services/order-placement.js", () => ({ createOrderPlacementService: vi.fn(() => ({ placeOrderForAccount })) }));
   vi.doMock("../src/services/portfolio-read.js", () => ({
     buildAccountPortfolioModel: vi.fn().mockResolvedValue({}),
     presentAccountPortfolioModel: vi.fn(async ({ portfolio }: { portfolio: Record<string, unknown> }) => portfolio),
@@ -136,7 +121,7 @@ const loadRoutes = async (options?: {
   });
   app.route("/admin", createAdminRoutes({} as never));
 
-  return { app, getUserAccountScope, parseJson, beginIdempotentRequest, storeIdempotentJsonResponse, placeOrderForAccount };
+  return { app, getUserAccountScope, parseJson };
 };
 
 afterEach(() => {
@@ -202,12 +187,10 @@ describe("admin routes", () => {
     });
   });
 
-  it("returns stable placement errors without storing idempotency responses", async () => {
+  it("does not expose admin order placement", async () => {
     const routes = await loadRoutes({
       user: { id: "usr_1", name: "Alice" },
       account: { id: "acct_1", userId: "usr_1", balance: 100 },
-      placement: { kind: "error", status: 400, code: "INVALID_INPUT", message: "quantity must align with step 1" },
-      idempotencyResult: { kind: "candidate", candidate: { id: "idem_1" } },
     });
 
     const res = await routes.app.request("/admin/users/usr_1/orders", {
@@ -216,14 +199,8 @@ describe("admin routes", () => {
       body: JSON.stringify({ market: "spot", reference: "YES", side: "buy", type: "market", quantity: 1, reasoning: "admin" }),
     });
 
-    expect(res.status).toBe(400);
-    await expect(res.json()).resolves.toEqual({
-      error: { code: "INVALID_INPUT", message: "quantity must align with step 1" },
-    });
-    expect(routes.beginIdempotentRequest).toHaveBeenCalled();
-    expect(routes.placeOrderForAccount).toHaveBeenCalledWith(
-      expect.objectContaining({ account: expect.objectContaining({ id: "acct_1" }) }),
-    );
-    expect(routes.storeIdempotentJsonResponse).not.toHaveBeenCalled();
+    expect(res.status).toBe(404);
+    expect(routes.parseJson).not.toHaveBeenCalled();
+    expect(routes.getUserAccountScope).not.toHaveBeenCalled();
   });
 });

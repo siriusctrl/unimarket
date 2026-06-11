@@ -5,13 +5,12 @@ This guide covers the operator-facing dashboard and admin-only API surface.
 ## What the Admin Surface Is For
 
 Admins can:
-- create trader users
+- create agent users
 - fund and withdraw from user accounts
 - inspect portfolio and audit history across users
-- place simulation orders on behalf of a user from admin API scripts when needed
 - monitor funding, liquidation, and equity trends
 
-The dashboard is intentionally observational: it is for portfolio review, agent audit, and incident follow-up, not manual trading. Admin order placement still exists as an API surface for scripts and operational tooling, and it uses the same validation, fill logic, accounting, and market constraints as normal user order placement.
+The dashboard and admin API are intentionally observational and operational: they are for account setup, portfolio review, agent audit, and incident follow-up, not manual or proxy trading. Agents place orders through their own user API keys, and the platform simulates fills, reconciliation, settlement, liquidation, PnL, and audit events from those agent-originated writes.
 
 ## Dashboard Design Contract
 
@@ -73,7 +72,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 |--------|----------|-------------|
 | `POST` | `/api/admin/users/:id/deposit` | Add funds to a user's default account |
 | `POST` | `/api/admin/users/:id/withdraw` | Remove funds from a user's default account |
-| `POST` | `/api/admin/traders` | Create a trader user and default account |
+| `POST` | `/api/admin/traders` | Create an agent user and default account |
 
 Examples:
 
@@ -100,22 +99,14 @@ curl -X POST http://localhost:3100/api/admin/users/<userId>/deposit \
 | `GET` | `/api/admin/users/:id/timeline` | One user's merged audit timeline |
 | `GET` | `/api/admin/equity-history` | Historical equity snapshots grouped by user |
 
-### Trading on behalf of a user
+### Order execution boundary
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/admin/users/:id/orders` | Place an order for a user's default account |
+Admins do not place orders on behalf of users. Order writes belong to agent/user credentials through `POST /api/orders`, where every state-changing action still requires `reasoning`.
 
-This endpoint intentionally mirrors normal user-side order semantics.
-
-Important rules:
-- all orders still require `reasoning`
-- optional `accountId` must match the user's default account if supplied
-- `Idempotency-Key` is supported and should be used by scripts for retry-safe writes
-- `leverage` and `reduceOnly` are only valid for perp markets
-- reference normalization and trading-constraint validation still apply
-- market orders fill immediately using directional executable prices
-- limit orders remain pending until the background reconciler fills or cancels them
+This keeps the product boundary simple:
+- agents decide and submit orders
+- the trading engine simulates fills and persists accounting state
+- operators review exposure, PnL, valuation health, and audit timelines
 
 ## Timeline Semantics
 
@@ -183,13 +174,13 @@ For operators, that means the activity feed can now show:
 
 - `GET /api/admin/overview` is read-only. Equity snapshots are recorded by the background equity snapshotter worker.
 - when overview or per-user portfolio valuation is partial, treat aggregate equity and PnL as incomplete until pricing recovers
-- Admin API order placement does not bypass trading constraints or risk rules.
+- Admin API does not expose order placement. Use agent/user API keys for order writes.
 - If you see liquidation events, always check the paired portfolio state and recent funding for context.
 - If a pending `reduceOnly` order disappears after liquidation, that is expected cleanup behavior.
 
 ## Recommended Operator Workflow
 
-1. Create a dedicated trader user.
+1. Create a dedicated agent user.
 2. Deposit starting capital.
 3. Let agents place trades through the user API.
 4. Monitor positions and funding through portfolio views.

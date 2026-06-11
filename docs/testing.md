@@ -49,7 +49,7 @@ Coverage targets:
 - trading: market fill, pending limit order, cancel, automatic reconciliation
 - account data: account, positions, portfolio, timeline, journal
 - workers: settlement, funding, liquidation
-- admin: deposit, withdraw, overview, portfolio, timeline, order placement
+- admin: deposit, withdraw, overview, portfolio, timeline, no proxy order placement
 - real-time: `system.ready`, fills, cancels, settlements, funding, liquidation
 
 ## One-Command Smoke Playbook

@@ -13,7 +13,7 @@ It is intentionally pragmatic:
 
 The codebase has already made two important moves:
 
-- order placement now runs through shared services instead of separate user/admin execution paths
+- order placement now runs through the agent/user API and shared engine services, without an admin proxy order path
 - order cancellation now also runs through shared services instead of separate route/worker code
 
 The next simplifications should continue in the same direction:
