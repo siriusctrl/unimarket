@@ -38,7 +38,7 @@
 - Capabilities: `search`, `browse`, `quote`, `orderbook`, `funding`, `priceHistory`.
 - Browse sorts: `price`, `volume`, `openInterest`.
 - Explicit search sorts: `price`, `volume`, `openInterest`.
-- Default query search ranking is relevance first, then `volume`, then `openInterest`, then `price`.
+- Default query search ordering is relevance first, then `volume`, then `openInterest`, then `price`.
 - Quantity precision is per-symbol and derived from `szDecimals`.
 - `maxLeverage` is enforced per symbol.
 - Funding applies hourly and affects realized account balance over time.
@@ -47,19 +47,19 @@
   - native intervals and supported intervals match
   - `supportsResampling = false`
 
-## Choosing Reads Before Trading
+## Read Sequences Before Orders
 
-### Prediction-market candidate
+### Prediction-market order sequence
 1. Browse or search Polymarket.
 2. Keep the returned `reference`.
 3. Read `quote` and `orderbook`.
-4. Optionally read `price-history` to inspect trend.
+4. Optionally read `price-history` when the caller needs candles.
 5. Optionally read `resolve` if the market may already be settling.
 6. Validate `trading-constraints` before ordering.
 
-### Perp candidate
+### Perp order sequence
 1. Browse or search Hyperliquid.
 2. Keep the returned `reference`.
 3. Read `quote`, `orderbook`, and `funding`.
-4. Read `price-history` for recent trend or volatility.
+4. Optionally read `price-history` when the caller needs candles.
 5. Validate `trading-constraints` before ordering.

@@ -289,7 +289,7 @@ Trading and audit commands:
 Notes:
   - Use orders-open instead of guessing status=open.
   - Use snapshot for account + portfolio + positions + orders in one call.
-  - Use scan on a shortlist to gather constraints, quotes, orderbook summaries,
+  - Use scan on a supplied reference list to gather constraints, quotes, orderbook summaries,
     optional funding, and optional history summaries in one structured response.
 USAGE
 }

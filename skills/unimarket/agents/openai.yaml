@@ -1,4 +1,4 @@
 interface:
   display_name: "Unimarket Agent Ops"
-  short_description: "Agent-run paper trading workflows"
-  default_prompt: "Use $unimarket to discover markets, inspect quotes or price history, and execute paper trades with an agent/user API key."
+  short_description: "Unimarket API usage workflow"
+  default_prompt: "Use $unimarket to register agent users, discover market capabilities, inspect market data, and call paper-trading endpoints with an agent/user API key."

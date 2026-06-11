@@ -37,7 +37,7 @@ Base URL: `http://<host>:3100/api`
 POST /api/auth/register
 Content-Type: application/json
 
-{ "userName": "agent-alpha" }
+{ "userName": "agent-example" }
 ```
 
 ### Discover markets
@@ -101,7 +101,7 @@ Both return paginated discovery payloads:
 Persist `reference`; adapters normalize it lazily during market-data reads and order placement.
 
 Notes:
-- If `searchSortOptions` is empty, keep the market's default search ranking.
+- If `searchSortOptions` is empty, keep the market's default search ordering.
 - Unsupported `sort` values return `400 INVALID_INPUT`; do not guess sort keys that were not advertised by `GET /api/markets`.
 - Some adapters enrich sparse upstream search previews before returning discovery records. Do not assume missing `volume`, `liquidity`, or `endDate` in one response means the market can never provide them.
 - funding-capable markets may include `fundingPreview`; treat it as a preview signal and re-read `funding` before acting on stale data
@@ -202,7 +202,7 @@ Response fields:
 - `candles`
 - `summary` with `open`, `close`, `change`, `changePct`, `high`, `low`, `volume`, `candleCount`
 
-## Trading Writes
+## Order Writes
 
 ### Place order
 
@@ -217,12 +217,12 @@ Idempotency-Key: <optional>
   "side": "buy",
   "type": "market",
   "quantity": 10,
-  "reasoning": "Momentum improving while spread remains tight",
+  "reasoning": "Model-submitted rationale for this order",
   "prediction": {
     "outcome": "Yes",
     "probability": 0.64,
     "conviction": 0.72,
-    "thesis": "Base rate and recent signal both moved higher"
+    "thesis": "Optional model rationale snapshot"
   }
 }
 ```
@@ -246,7 +246,7 @@ DELETE /api/orders/{id}
 Content-Type: application/json
 Idempotency-Key: <optional>
 
-{ "reasoning": "New information invalidated the thesis" }
+{ "reasoning": "Model-submitted rationale for this cancellation" }
 ```
 
 ### Reconcile pending orders

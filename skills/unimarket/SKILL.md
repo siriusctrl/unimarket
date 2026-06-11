@@ -9,22 +9,23 @@ Base URL:
 - `http://<host>:3100/api`
 
 Authentication:
-- Send `Authorization: Bearer <api_key>` on every endpoint except register and health.
+- Send `Authorization: Bearer <api_key>` on agent/user endpoints.
+- Register, health, and dashboard read endpoints are intentionally unauthenticated.
 
 ## Fast Path
 
 1. Register once with helper `register-safe` when you need unattended credential bootstrap, or `POST /api/auth/register` for raw API use.
 2. Discover market IDs, capabilities, browse sorts, explicit search sort options, and price-history defaults with `markets-summary` or `GET /api/markets`.
-3. Browse or search candidates:
+3. Browse or search market records:
    - `GET /api/markets/{market}/browse`
    - `GET /api/markets/{market}/search?q=...`
    - optional override: `GET /api/markets/{market}/search?q=...&sort=...`
 4. Persist the returned `reference`; treat it as the only external market identifier.
-5. Read execution and sizing context before trading:
+5. Read execution and sizing context before order writes:
    - `GET /api/markets/{market}/trading-constraints?reference=...`
    - `GET /api/markets/{market}/quote?reference=...`
    - optional `orderbook`, `price-history`, `funding`, `resolve`
-6. Prefer helper workflow commands such as `snapshot`, `orders-open`, `history-summary`, and `scan` for deterministic decision prep.
+6. Prefer helper workflow commands such as `snapshot`, `orders-open`, `history-summary`, and `scan` for deterministic endpoint work.
 7. Place or cancel orders with non-empty `reasoning`; attach `prediction` when making a forecast-backed order.
 8. Audit with `orders`, `positions`, `portfolio`, `timeline`, `journal`, and `events`.
 
@@ -32,10 +33,10 @@ Authentication:
 
 - Discover `market`, `browseOptions`, `searchSortOptions`, and `priceHistory` support from `GET /api/markets`; do not hardcode markets, references, intervals, or sort keys.
 - Prefer `browse` for blank exploration; use `search` only with a concrete non-empty query.
-- When `searchSortOptions` is empty, rely on the market's default search ranking. When explicit search sort options exist, send `sort` only when you intentionally want to override the default ranking.
+- When `searchSortOptions` is empty, rely on the market's default search ordering. When explicit search sort options exist, send `sort` only when you intentionally want to override the default ordering.
 - Use `reference` everywhere in public market-data and order endpoints.
 - Read `priceHistory.supportedIntervals`, `defaultInterval`, `defaultLookbacks`, and `supportsResampling` before requesting candles.
-- Prefer `interval + lookback` for routine trend checks.
+- Prefer `interval + lookback` for routine candle reads.
 - Use `asOf` only when you need reproducible historical analysis.
 - Use `startTime + endTime` only for custom ranges.
 - Treat quote fields as:
@@ -56,7 +57,7 @@ Authentication:
 
 - Treat the web dashboard as an operator review console for humans, not as the primary trading surface.
 - Agents should trade through the API and helper script; humans should use the dashboard to inspect exposure, valuation health, PnL, funding/liquidation events, and audit timelines.
-- Admin credentials are for setup and observation, not proxy order placement. Order writes should use the agent/user API key that owns the account.
+- Admin credentials are for setup and protected operational endpoints, not proxy order placement. Order writes should use the agent/user API key that owns the account.
 - Do not reintroduce manual buy/sell order tickets, market discovery panels, or human-first trading workflows into the dashboard unless explicitly requested as a new product direction.
 - Preserve the established visual direction when touching the web UI: neutral graphite surfaces, moss/eucalyptus primary accents, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, neon glows, washed-out gray-green, and dirty yellow/olive casts.
 - Keep reasoning and journal/audit context prominent. The UI should make it easy to understand what agents did and why.
@@ -65,10 +66,10 @@ Authentication:
 
 - Use `skills/unimarket/scripts/unimarket-agent.sh` for deterministic endpoint work whenever a matching command already exists.
 - Prefer batch helper commands such as `quotes`, `orderbooks`, and `fundings` before writing per-reference loops.
-- Use raw `curl`, ad-hoc shell, `jq`, or Node only for situational analysis, ranking, summarization, or helper gaps.
+- Use raw `curl`, ad-hoc shell, `jq`, or Node only for one-off endpoint checks, response shaping, or helper gaps.
 - Do not duplicate helper responsibilities such as auth headers, endpoint paths, write payload construction, or idempotency handling in custom code unless the helper lacks the operation.
-- If the same derived metric, fetch pattern, or decision-prep script keeps reappearing, treat that as a signal to extend the helper or API instead of re-implementing it forever.
-- Keep subjective trade selection, thesis ranking, and trade or no-trade judgment in the model rather than in helper conventions.
+- If the same derived metric, fetch pattern, or response-shaping script keeps reappearing, treat that as a signal to extend the helper or API instead of re-implementing it forever.
+- Do not add market-selection heuristics, scoring formulas, or trading rules to the skill and helper conventions. This skill should only teach the model how to use Unimarket correctly.
 
 ## Helper Script
 
@@ -85,7 +86,7 @@ Preferred workflow commands:
 - `snapshot [orders_view] [limit] [offset]` for account + portfolio + positions + orders in one response
 - `orders-open [limit] [offset]` for duplicate-order prevention without guessing query params
 - `history-summary <market> <reference> [interval] [lookback] [as_of]` for summary + last candles without full-history plumbing
-- `scan <market> <references_csv> [interval] [lookback] [as_of]` for shortlist preparation with constraints, quotes, orderbook summaries, optional funding, and optional history summaries
+- `scan <market> <references_csv> [interval] [lookback] [as_of]` for batch inspection of supplied references with constraints, quotes, orderbook summaries, optional funding, and optional history summaries
 - `order-json <payload_json> [idempotency_key]` for forecast-backed orders that include a `prediction` object
 
 Core commands still available:
