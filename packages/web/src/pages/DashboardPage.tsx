@@ -47,7 +47,7 @@ export const DashboardPage = () => {
   const { adminKey, client } = useAdminSession();
 
   const { overview, error, loading, refresh } = useAdminOverview({ client, enabled: Boolean(adminKey) });
-  const { data: historyData, loading: historyLoading, refresh: refreshHistory } = useEquityHistory({
+  const { data: historyData, error: historyError, loading: historyLoading, refresh: refreshHistory } = useEquityHistory({
     client,
     enabled: Boolean(adminKey),
     range,
@@ -283,16 +283,16 @@ export const DashboardPage = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <Card className="border-primary/25 bg-card/55 backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-300">
+      <Card className="border-primary/25 animate-in fade-in-0 slide-in-from-top-1 duration-300">
         <CardHeader className="gap-4 md:flex-row md:items-center md:justify-between md:space-y-0">
           <div className="space-y-2">
             <Badge variant="secondary" className="w-fit gap-1 border border-border/40">
               <Users className="h-3 w-3" />
-              Admin Dashboard
+              Review workspace
             </Badge>
-            <CardTitle className="text-3xl font-bold tracking-tight sm:text-4xl">Agent Overview</CardTitle>
+            <CardTitle className="text-3xl font-bold tracking-normal sm:text-4xl">Agent observation console</CardTitle>
             <CardDescription>
-              Monitor all agents, their holdings, and performance.
+              Review agent-run paper market exposure, valuation health, and recent outcomes.
             </CardDescription>
           </div>
 
@@ -311,9 +311,21 @@ export const DashboardPage = () => {
 
       {error ? (
         <Card className="border-destructive/40 bg-destructive/10 shadow-none animate-in fade-in-0 duration-200">
-          <CardContent className="flex items-center gap-2 py-4 text-sm text-destructive">
+          <CardContent className="flex flex-col gap-2 py-4 text-sm text-destructive sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <CircleAlert className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="w-fit border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => void handleRefresh()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : historyError ? (
+        <Card className="border-amber-500/40 bg-amber-500/10 shadow-none animate-in fade-in-0 duration-200">
+          <CardContent className="flex items-center gap-2 py-4 text-sm text-amber-700 dark:text-amber-300">
             <CircleAlert className="h-4 w-4" />
-            {error}
+            Equity history is temporarily unavailable: {historyError}
           </CardContent>
         </Card>
       ) : null}
@@ -330,26 +342,26 @@ export const DashboardPage = () => {
       {overview ? (
         <>
           {/* Equity / Return line chart */}
-          <Card className="border-border/75 bg-card/55 hover:border-primary/35 animate-in fade-in-0 duration-300">
+          <Card className="border-border/75 hover:border-primary/35 animate-in fade-in-0 duration-300">
             <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div>
-                <CardTitle>{chartMode === "equity" ? "Net Value Trend" : "Return Rate Trend"}</CardTitle>
+                <CardTitle>{chartMode === "equity" ? "Equity trend" : "Return trend"}</CardTitle>
                 <CardDescription>
                   {chartMode === "equity"
-                    ? "Agent portfolio equity over time"
-                    : "Percentage return since start of period"}
+                    ? "Paper portfolio equity by agent across review snapshots"
+                    : "Percentage return since the start of the selected period"}
                 </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {/* Mode toggle */}
-                <div className="flex rounded-lg border border-border/50 p-0.5">
+                <div className="flex rounded-md border border-border/60 bg-background/50 p-0.5">
                   <Button
                     variant={chartMode === "equity" ? "default" : "ghost"}
                     size="sm"
                     className="h-7 text-xs"
                     onClick={() => setChartMode("equity")}
                   >
-                    Net Value
+                    Equity
                   </Button>
                   <Button
                     variant={chartMode === "return" ? "default" : "ghost"}
@@ -361,7 +373,7 @@ export const DashboardPage = () => {
                   </Button>
                 </div>
                 {/* Time range */}
-                <div className="flex rounded-lg border border-border/50 p-0.5">
+                <div className="flex rounded-md border border-border/60 bg-background/50 p-0.5">
                   {RANGE_OPTIONS.map((r) => (
                     <Button
                       key={r}
@@ -378,12 +390,15 @@ export const DashboardPage = () => {
             </CardHeader>
             <CardContent className="h-[340px]">
               {historyLoading ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Loading chart data…
+                <div className="grid h-full content-end gap-3">
+                  <div className="h-9 animate-pulse rounded-md bg-muted/45" />
+                  <div className="h-14 animate-pulse rounded-md bg-muted/55" />
+                  <div className="h-20 animate-pulse rounded-md bg-muted/70" />
+                  <div className="h-28 animate-pulse rounded-md bg-muted/50" />
                 </div>
               ) : chartData.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  No historical data yet. Snapshots are recorded each time you refresh.
+                <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+                  No review history yet. Refresh records the next snapshot for comparison.
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -447,7 +462,7 @@ export const DashboardPage = () => {
           <section className="space-y-3 animate-in fade-in-0 duration-300">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold tracking-tight">All Agents</h2>
+                <h2 className="text-lg font-semibold tracking-normal">Agent roster</h2>
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
@@ -455,7 +470,7 @@ export const DashboardPage = () => {
                     className="h-7 text-xs text-muted-foreground hover:text-foreground"
                     onClick={selectAllAgents}
                   >
-                    Select All
+                    Show all
                   </Button>
                   <span className="text-border">|</span>
                   <Button
@@ -473,16 +488,16 @@ export const DashboardPage = () => {
                 <Input
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="Search agents…"
+                  placeholder="Search agents..."
                   className="pl-9"
                 />
               </div>
             </div>
 
             {filteredAgents.length === 0 ? (
-              <Card className="bg-card/55">
+              <Card>
                 <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                  {search ? "No agents match your search." : "No agent accounts found."}
+                  {search ? "No agents match this review filter." : "No agent accounts are visible yet."}
                 </CardContent>
               </Card>
             ) : (
@@ -495,8 +510,8 @@ export const DashboardPage = () => {
                       <Card
                         key={agent.userId}
                         className={`cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg overflow-hidden ${isSelected
-                          ? "bg-card/55 border-primary/30"
-                          : "bg-card/30 border-border/40 opacity-60"
+                          ? "bg-card border-primary/35"
+                          : "bg-card/70 border-border/45 opacity-65"
                           }`}
                         onClick={(e) => {
                           if (e.ctrlKey || e.metaKey) {
@@ -540,7 +555,7 @@ export const DashboardPage = () => {
                                       navigate(`/agents/${agent.userId}`);
                                     }}
                                   >
-                                    Detail →
+                                    Review
                                   </Button>
                                 </div>
                               </div>
@@ -548,11 +563,11 @@ export const DashboardPage = () => {
                             <CardContent className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <p className="text-xs text-muted-foreground">Equity</p>
+                                  <p className="text-xs text-muted-foreground">Paper equity</p>
                                   <p className="text-lg font-semibold">{formatCurrency(agent.totals.equity)}</p>
                                 </div>
                                 <div>
-                                  <p className="text-xs text-muted-foreground">Cash</p>
+                                  <p className="text-xs text-muted-foreground">Cash reserve</p>
                                   <p className="text-lg font-semibold">{formatCurrency(agent.balance)}</p>
                                 </div>
                               </div>
@@ -577,7 +592,7 @@ export const DashboardPage = () => {
                               {agent.positions.length > 0 ? (
                                 <div className="space-y-1 border-t border-border/50 pt-2">
                                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Holdings
+                                    Exposure
                                   </p>
                                   {agent.positions.slice(0, 3).map((pos) => (
                                     <div key={`${pos.market}:${pos.symbol}`} className="flex items-center justify-between text-xs">
@@ -646,9 +661,9 @@ export const DashboardPage = () => {
           </section>
         </>
       ) : (
-        <Card className="bg-card/55">
+        <Card>
           <CardContent className="py-16 text-center">
-            <p className="text-sm text-muted-foreground">Admin overview not available yet.</p>
+            <p className="text-sm text-muted-foreground">Review overview is not available yet.</p>
           </CardContent>
         </Card>
       )}

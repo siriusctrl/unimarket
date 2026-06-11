@@ -8,10 +8,10 @@ Admins can:
 - create trader users
 - fund and withdraw from user accounts
 - inspect portfolio and audit history across users
-- place simulation orders on behalf of a user from the dashboard or admin API
+- place simulation orders on behalf of a user from admin API scripts when needed
 - monitor funding, liquidation, and equity trends
 
-Admins cannot bypass the core trading engine. Admin order placement still uses the same validation, fill logic, accounting, and market constraints as normal user order placement.
+The dashboard is intentionally observational: it is for portfolio review, agent audit, and incident follow-up, not manual trading. Admin order placement still exists as an API surface for scripts and operational tooling, and it uses the same validation, fill logic, accounting, and market constraints as normal user order placement.
 
 ## Using the Dashboard
 
@@ -27,7 +27,7 @@ Typical local URLs:
 
 ### Main operator views
 
-The dashboard currently exposes several operator workflows.
+The dashboard currently exposes observation and review workflows.
 
 #### Overview
 
@@ -48,18 +48,6 @@ A user detail view shows:
 - current balance and open positions
 - perp risk fields such as leverage and liquidation price when applicable
 - recent activity merged from orders, journals, funding, and liquidation audits
-
-#### Trade console
-
-The trade page allows an admin to:
-- create a new trader account
-- choose a market dynamically from runtime discovery
-- search and browse market references
-- inspect quotes and trading constraints
-- select a target user
-- place market or limit orders on that user's behalf
-
-This uses the admin endpoint `POST /api/admin/users/:id/orders`.
 
 ## Admin API Endpoints
 
@@ -113,7 +101,7 @@ This endpoint intentionally mirrors normal user-side order semantics.
 Important rules:
 - all orders still require `reasoning`
 - optional `accountId` must match the user's default account if supplied
-- `Idempotency-Key` is supported and should be used by the dashboard or scripts for retry-safe writes
+- `Idempotency-Key` is supported and should be used by scripts for retry-safe writes
 - `leverage` and `reduceOnly` are only valid for perp markets
 - reference normalization and trading-constraint validation still apply
 - market orders fill immediately using directional executable prices
@@ -185,7 +173,7 @@ For operators, that means the activity feed can now show:
 
 - `GET /api/admin/overview` is read-only. Equity snapshots are recorded by the background equity snapshotter worker.
 - when overview or per-user portfolio valuation is partial, treat aggregate equity and PnL as incomplete until pricing recovers
-- Admin order placement does not bypass trading constraints or risk rules.
+- Admin API order placement does not bypass trading constraints or risk rules.
 - If you see liquidation events, always check the paired portfolio state and recent funding for context.
 - If a pending `reduceOnly` order disappears after liquidation, that is expected cleanup behavior.
 
@@ -193,7 +181,7 @@ For operators, that means the activity feed can now show:
 
 1. Create a dedicated trader user.
 2. Deposit starting capital.
-3. Place trades either through the user API or the admin trade console.
+3. Let agents place trades through the user API.
 4. Monitor positions and funding through portfolio views.
 5. Use timelines and SSE for audit and incident review.
 6. Use equity history for longer-horizon strategy comparison.

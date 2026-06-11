@@ -26,10 +26,10 @@ const EVENT_TYPES = [
 ] as const;
 
 const eventIcon = (event: TimelineEvent) => {
-    if (event.type === "journal") return <BookOpen className="h-4 w-4 text-blue-500" />;
+    if (event.type === "journal") return <BookOpen className="h-4 w-4 text-primary" />;
     if (event.type === "order.cancelled") return <XCircle className="h-4 w-4 text-amber-500" />;
     if (event.type === "position.liquidated") return <AlertTriangle className="h-4 w-4 text-rose-500" />;
-    if (event.type === "funding.applied") return <Coins className="h-4 w-4 text-cyan-500" />;
+    if (event.type === "funding.applied") return <Coins className="h-4 w-4 text-primary" />;
     if (event.data.side === "buy") return <ArrowUpRight className="h-4 w-4 text-emerald-500" />;
     return <ArrowDownRight className="h-4 w-4 text-rose-500" />;
 };
@@ -92,13 +92,13 @@ export const ActivityFeed = ({
     }, [events, typeFilter]);
 
     return (
-        <Card className="bg-card/55 hover:border-primary/30">
+        <Card className="hover:border-primary/30">
             <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
                 <div>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Orders, liquidations, funding, and journal entries.</CardDescription>
+                    <CardTitle>Audit timeline</CardTitle>
+                    <CardDescription>Agent actions, funding events, liquidations, and review notes.</CardDescription>
                 </div>
-                <div className="flex rounded-lg border border-border/50 p-0.5">
+                <div className="flex flex-wrap rounded-md border border-border/60 bg-background/50 p-0.5">
                     {EVENT_TYPES.map((t) => (
                         <Button
                             key={t.value}
@@ -114,21 +114,25 @@ export const ActivityFeed = ({
             </CardHeader>
             <CardContent>
                 {loading ? (
-                    <div className="py-8 text-center text-sm text-muted-foreground">
-                        Loading activity…
+                    <div className="space-y-3">
+                        <div className="h-16 animate-pulse rounded-md bg-muted/70" />
+                        <div className="h-20 animate-pulse rounded-md bg-muted/60" />
+                        <div className="h-16 animate-pulse rounded-md bg-muted/50" />
                     </div>
                 ) : filteredEvents.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-muted-foreground/35 bg-muted/35 p-4 text-sm text-muted-foreground">
+                    <div className="rounded-md border border-dashed border-muted-foreground/35 bg-muted/35 p-4 text-sm text-muted-foreground">
                         {typeFilter !== "all" ? `No ${typeFilter === "order.cancelled" ? "cancelled" : typeFilter} events on this page.` : emptyMessage}
                     </div>
                 ) : (
-                    <div className="space-y-3">
+                    <div className="relative space-y-3 before:absolute before:bottom-2 before:left-[1.18rem] before:top-2 before:w-px before:bg-border/70">
                         {filteredEvents.map((event) => (
                             <div
                                 key={`${event.type}-${event.data.id}`}
-                                className="group flex gap-3 rounded-lg border border-border/50 bg-background/50 p-3 transition-colors hover:border-border hover:bg-accent/30"
+                                className="group relative flex gap-3 rounded-md border border-border/55 bg-background/70 p-3 transition-colors hover:border-primary/35 hover:bg-accent/25"
                             >
-                                <div className="shrink-0 self-center">{eventIcon(event)}</div>
+                                <div className="z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-card shadow-panel">
+                                    {eventIcon(event)}
+                                </div>
                                 <div className="min-w-0 flex-1 space-y-1">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <Badge variant={badgeVariant(event)} className="text-xs">
@@ -197,9 +201,14 @@ export const ActivityFeed = ({
                                     ) : null}
 
                                     {event.reasoning ? (
-                                        <p className="text-xs leading-relaxed text-muted-foreground italic">
-                                            "{event.reasoning}"
-                                        </p>
+                                        <div className="mt-2 rounded-md border border-primary/20 bg-primary/8 p-2.5">
+                                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+                                                Audit note
+                                            </p>
+                                            <p className="text-xs leading-relaxed text-foreground/80">
+                                                {event.reasoning}
+                                            </p>
+                                        </div>
                                     ) : null}
                                 </div>
                             </div>

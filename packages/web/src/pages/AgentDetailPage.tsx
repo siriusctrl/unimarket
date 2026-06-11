@@ -48,16 +48,16 @@ export const AgentDetailPage = () => {
   };
 
   if (loading && !overview) {
-    return <LoadingState label="Loading agent snapshot..." />;
+    return <LoadingState label="Loading agent review..." />;
   }
 
   if (!agent && overview) {
     return (
-      <Card className="bg-card/55">
+      <Card>
         <CardContent className="space-y-4 py-12 text-center">
-          <p className="text-sm text-muted-foreground">Agent not found in the latest overview.</p>
+          <p className="text-sm text-muted-foreground">Agent not found in the latest review snapshot.</p>
           <Button onClick={() => navigate("/dashboard")} variant="outline">
-            Back to dashboard
+            Back to overview
           </Button>
         </CardContent>
       </Card>
@@ -70,7 +70,7 @@ export const AgentDetailPage = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="ghost" className="gap-2" onClick={() => navigate("/dashboard")}>
           <ArrowLeft className="h-4 w-4" />
-          Back
+          Back to overview
         </Button>
         <Button type="button" onClick={() => void handleRefresh()} disabled={loading || timelineLoading} className="gap-2">
           <RefreshCw className={loading || timelineLoading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
@@ -90,13 +90,13 @@ export const AgentDetailPage = () => {
       {agent ? (
         <>
           {/* Agent header */}
-          <Card className="border-primary/25 bg-card/55 shadow-panel backdrop-blur-xl animate-in fade-in-0 slide-in-from-top-1 duration-300">
+          <Card className="border-primary/25 animate-in fade-in-0 slide-in-from-top-1 duration-300">
             <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
               <div className="space-y-2">
                 <Badge variant="secondary" className="w-fit">
-                  Agent Detail
+                  Agent review
                 </Badge>
-                <CardTitle className="text-3xl font-bold tracking-tight">{agent.userName}</CardTitle>
+                <CardTitle className="text-3xl font-bold tracking-normal">{agent.userName}</CardTitle>
                 <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -121,30 +121,30 @@ export const AgentDetailPage = () => {
 
           {/* KPI cards */}
           <section className="grid gap-4 md:grid-cols-3 animate-in fade-in-0 duration-300">
-            <Card className="bg-card/55 hover:border-primary/30">
+            <Card className="hover:border-primary/30">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Cash Balance</CardTitle>
-                <CardDescription>Available funds for new positions</CardDescription>
+                <CardTitle className="text-lg">Cash reserve</CardTitle>
+                <CardDescription>Uncommitted paper capital</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{formatCurrency(agent.balance)}</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/55 hover:border-primary/30">
+            <Card className="hover:border-primary/30">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Portfolio Equity</CardTitle>
+                <CardTitle className="text-lg">Paper equity</CardTitle>
                 <CardDescription>
-                  {agent.valuation.status === "partial" ? "Unknown until all open positions are priced" : "Cash plus marked value"}
+                  {agent.valuation.status === "partial" ? "Unknown until all open positions are priced" : "Cash plus marked exposure"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold">{formatCurrency(agent.totals.equity)}</p>
               </CardContent>
             </Card>
-            <Card className="bg-card/55 hover:border-primary/30">
+            <Card className="hover:border-primary/30">
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Unrealized PnL</CardTitle>
-                <CardDescription>Based on latest cached marks</CardDescription>
+                <CardDescription>Based on latest review marks</CardDescription>
               </CardHeader>
               <CardContent>
                 <p
@@ -164,13 +164,13 @@ export const AgentDetailPage = () => {
 
           {/* Positions + Activity */}
           <section className="space-y-4 animate-in fade-in-0 duration-300">
-            <Card className="bg-card/55 hover:border-primary/30">
+            <Card className="hover:border-primary/30">
               <CardHeader>
-                <CardTitle>Open Positions</CardTitle>
-                <CardDescription>Current holdings across markets.</CardDescription>
+                <CardTitle>Open exposure</CardTitle>
+                <CardDescription>Current paper holdings across markets.</CardDescription>
               </CardHeader>
               <CardContent>
-                <PositionsTable rows={positions} showAgent={false} emptyMessage="No open positions for this agent." />
+                <PositionsTable rows={positions} showAgent={false} emptyMessage="No open exposure for this agent." />
               </CardContent>
             </Card>
 
@@ -188,9 +188,9 @@ export const AgentDetailPage = () => {
           </section>
         </>
       ) : (
-        <Card className="bg-card/55">
+        <Card>
           <CardContent className="py-16 text-center">
-            <p className="text-sm text-muted-foreground">Loading agent details.</p>
+            <p className="text-sm text-muted-foreground">Loading agent review.</p>
           </CardContent>
         </Card>
       )}

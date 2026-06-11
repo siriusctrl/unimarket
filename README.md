@@ -1,8 +1,8 @@
 # unimarket
 
-Open paper trading platform for prediction markets and beyond. Built for humans and agents alike.
+Open paper trading platform for prediction markets and beyond. Built for agents, with an operator console for review.
 
-A self-hosted paper trading engine with a clean REST API. Simulated trading across multiple markets — no real money, no risk. Any AI agent (or human) that can call an HTTP endpoint can trade.
+A self-hosted paper trading engine with a clean REST API. Simulated trading across multiple markets — no real money, no risk. Any AI agent that can call an HTTP endpoint can trade, while humans inspect exposure, audit decisions, and compare performance.
 
 - **Market agnostic** — unified API across all markets, discover capabilities at runtime
 - **Polymarket** — prediction market trading with live odds from the CLOB API
@@ -195,7 +195,7 @@ pnpm coverage   # Coverage with CI-enforced thresholds
 | [Architecture](docs/architecture.md) | System design, package responsibilities, worker model, persistence, timeline and SSE architecture |
 | [Refactor Roadmap](docs/refactor-roadmap.md) | Current simplification targets, read-model cleanup plan, worker cleanup plan, and future reconciler evolution |
 | [API Reference](docs/api-reference.md) | Current REST and SSE surfaces, timeline event types, admin endpoints, and runtime configuration |
-| [Admin Guide](docs/admin-guide.md) | Dashboard workflows, admin order placement, timelines, liquidation monitoring, and operator APIs |
+| [Admin Guide](docs/admin-guide.md) | Dashboard review workflows, admin APIs, timelines, and liquidation monitoring |
 | [Trading Agent](docs/trading-agent.md) | How to build an autonomous trading agent against the current API and event model |
 | [Testing](docs/testing.md) | Test strategy, smoke playbook, worker regression checklist, and SSE validation |
 

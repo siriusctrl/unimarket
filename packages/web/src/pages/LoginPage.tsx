@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyRound, Shield } from "lucide-react";
+import { ClipboardList, KeyRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "../components/ui/button";
@@ -35,41 +35,36 @@ export const LoginPage = () => {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 sm:px-6">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-28 top-[-80px] h-80 w-80 rounded-full bg-primary/18 blur-3xl" />
-        <div className="absolute -right-24 bottom-[-120px] h-96 w-96 rounded-full bg-cyan-400/15 blur-3xl dark:bg-sky-400/22" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,hsl(var(--background)_/_0.2),hsl(var(--background)_/_0.75))]" />
-      </div>
+      <div className="pointer-events-none absolute inset-0 border-y border-border/40 bg-[linear-gradient(to_bottom,hsl(var(--background)_/_0.18),hsl(var(--background)_/_0.78))]" />
 
       <div className="relative grid w-full max-w-5xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="hidden flex-col justify-center rounded-3xl border border-border/65 bg-card/45 p-9 backdrop-blur-xl lg:flex animate-in fade-in-0 slide-in-from-left-2 duration-500">
+        <section className="hidden flex-col justify-center rounded-lg border border-border/75 bg-card p-9 shadow-panel lg:flex animate-in fade-in-0 slide-in-from-left-2 duration-500">
           <Badge variant="outline" className="mb-5 w-fit gap-1.5">
-            <Shield className="h-3.5 w-3.5" />
-            Secure Admin Access
+            <ClipboardList className="h-3.5 w-3.5" />
+            Secure operator access
           </Badge>
-          <h1 className="max-w-lg text-4xl font-bold leading-tight tracking-tight text-balance">
-            Portfolio command center for multi-market paper trading.
+          <h1 className="max-w-lg text-4xl font-bold leading-tight tracking-normal text-balance">
+            Observation console for agent-run paper markets.
           </h1>
           <p className="mt-4 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            Inspect exposure, compare market concentration, and drill into agent-level holdings in one place with a
-            fully simulated execution model.
+            Inspect exposure, compare agent performance, and review the decisions behind every simulated position.
           </p>
           <div className="mt-8 space-y-3 text-xs text-muted-foreground">
             <p className="font-semibold uppercase tracking-[0.18em]">What you get</p>
             <p>Unified totals across markets and users</p>
-            <p>Sortable position explorer with drill-down navigation</p>
+            <p>Agent-level holdings and audit timelines</p>
             <p>No exchange keys required for core paper workflows</p>
           </div>
         </section>
 
-        <Card className="relative w-full border-primary/25 bg-card/58 shadow-panel-strong backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-300">
+        <Card className="relative w-full border-primary/25 shadow-panel-strong animate-in fade-in-0 zoom-in-95 duration-300">
           <CardHeader className="space-y-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/35 bg-primary/18 text-primary shadow-panel">
-              <Shield className="h-5 w-5" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-primary/35 bg-primary/12 text-primary shadow-panel">
+              <ClipboardList className="h-5 w-5" />
             </div>
             <div className="space-y-1">
-              <CardTitle className="text-2xl font-semibold">Unimarket Admin</CardTitle>
-              <CardDescription>Sign in with your admin key to access the live overview.</CardDescription>
+              <CardTitle className="text-2xl font-semibold">Unimarket operator</CardTitle>
+              <CardDescription>Sign in with your admin key to review the live market snapshot.</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -89,7 +84,7 @@ export const LoginPage = () => {
               </div>
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               <Button type="submit" className="w-full">
-                Continue to dashboard
+                Continue to overview
               </Button>
             </form>
             <p className="mt-4 text-xs text-muted-foreground">

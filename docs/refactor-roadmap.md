@@ -135,30 +135,30 @@ Implemented shape:
 - timeline event record types live in `@unimarket/core`
 - API timeline builders and dashboard timeline hooks consume the shared contract
 
-### 5. Break Up `TradePage`
+### 5. Remove Manual Dashboard Trading
 
 Priority: medium
 Status: completed
 
 Problem:
 
-- the admin trade console currently owns market loading, agent loading, quote refresh, search, portfolio fetch, order form state, and trader creation in one page component
+- the dashboard previously exposed a manual trade console even though the product direction is agent-run trading with human observation and review
 
 Current location:
 
-- `packages/web/src/pages/TradePage.tsx`
+- removed from `packages/web/src/pages/TradePage.tsx`
 
 Why this matters:
 
-- the file is large and mixes multiple concerns
-- repeated auth-failure handling is embedded in page-level effects
-- API response types are redeclared inline instead of being shared or centralized
+- manual trading made the operator UI feel like a human trading terminal instead of an agent evaluation console
+- it encouraged adding dashboard-only trading controls instead of keeping execution through the simple API contract
+- review, exposure, and audit workflows should remain the visible product surface
 
 Implemented shape:
 
-- `packages/web/src/pages/TradePage.tsx` now acts as an orchestration page
-- trade-specific UI lives under `packages/web/src/components/trade/`
-- networking and response types no longer live inline inside the page file
+- the `/trade` route and navigation item were removed
+- manual trade-only dashboard components were deleted
+- the dashboard now centers on overview, agent detail, positions, equity history, and activity timelines
 
 ### 6. Shared Admin API Client Helpers
 
@@ -171,7 +171,6 @@ Problem:
 
 Current locations:
 
-- `packages/web/src/pages/TradePage.tsx`
 - other admin-facing web modules
 
 Implemented shape:

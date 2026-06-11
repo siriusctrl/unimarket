@@ -60,6 +60,7 @@ export const formatFundingTime = (value: string | null | undefined): string => {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "UTC",
     timeZoneName: "short",
   }).format(new Date(timestamp));
 };

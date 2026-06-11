@@ -32,10 +32,10 @@ export const MarketCharts = ({
 
   return (
     <section className="grid gap-4 xl:grid-cols-2">
-      <Card className="border-border/75 bg-card/55 hover:border-primary/35">
+      <Card className="border-border/75 hover:border-primary/35">
         <CardHeader>
-          <CardTitle>Market Value by Venue</CardTitle>
-          <CardDescription>Top markets by current marked exposure</CardDescription>
+          <CardTitle>Exposure by venue</CardTitle>
+          <CardDescription>Top markets by current marked paper value</CardDescription>
         </CardHeader>
         <CardContent className="h-[310px]">
           {marketChartData.length > 0 ? (
@@ -64,17 +64,17 @@ export const MarketCharts = ({
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              No priced market data yet.
+            <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+              No priced market exposure yet.
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card className="border-border/75 bg-card/55 hover:border-primary/35">
+      <Card className="border-border/75 hover:border-primary/35">
         <CardHeader>
-          <CardTitle>Agent Equity Mix</CardTitle>
-          <CardDescription>Equity concentration across users or agents</CardDescription>
+          <CardTitle>Agent equity mix</CardTitle>
+          <CardDescription>Paper equity concentration across agents</CardDescription>
         </CardHeader>
         <CardContent className="h-[310px]">
           {agentMixData.length > 0 ? (
@@ -98,8 +98,8 @@ export const MarketCharts = ({
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              No account equity data yet.
+            <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+              No agent equity mix yet.
             </div>
           )}
         </CardContent>
