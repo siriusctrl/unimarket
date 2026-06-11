@@ -12,7 +12,7 @@ import { ArrowUpDown } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
-import { type PositionTableRow, formatCurrency, formatNumber, formatSignedCurrency } from "../lib/admin";
+import { type PositionTableRow, formatCurrency, formatNumber, formatSignedCurrency } from "../lib/dashboard";
 
 export const PositionsTable = ({
   rows,

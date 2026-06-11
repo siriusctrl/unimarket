@@ -264,7 +264,7 @@ Purpose:
 - record periodic account-equity snapshots for operator history charts
 
 Why it exists:
-- keeps `GET /api/admin/overview` read-only
+- keeps `GET /api/dashboard/overview` read-only
 - makes snapshot cadence an explicit background policy instead of a dashboard side effect
 
 ## Timeline and Event Architecture

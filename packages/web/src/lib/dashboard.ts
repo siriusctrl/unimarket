@@ -1,6 +1,6 @@
-import type { AgentView, OverviewResponse } from "./admin-api";
+import type { AgentView, OverviewResponse } from "./dashboard-api";
 
-export type { AgentView, MarketView, OverviewResponse, PositionView } from "./admin-api";
+export type { AgentView, MarketView, OverviewResponse, PositionView } from "./dashboard-api";
 
 export type PositionTableRow = {
   id: string;
@@ -28,8 +28,6 @@ export type MarketChartRow = {
   value: number;
   pnl: number;
 };
-
-export const ADMIN_KEY_STORAGE = "unimarket_admin_key";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -99,30 +97,6 @@ export const formatTooltipCurrency = (value: number | string | undefined): strin
   }
 
   return currencyFormatter.format(value);
-};
-
-export const readStoredAdminKey = (): string => {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  return window.localStorage.getItem(ADMIN_KEY_STORAGE) ?? "";
-};
-
-export const storeAdminKey = (value: string): void => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(ADMIN_KEY_STORAGE, value);
-};
-
-export const clearAdminKey = (): void => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.removeItem(ADMIN_KEY_STORAGE);
 };
 
 export const flattenPositions = (overview: OverviewResponse | null): PositionTableRow[] => {

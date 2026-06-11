@@ -1,7 +1,5 @@
 import type { TimelineEventRecord } from "@unimarket/core";
 
-import { readStoredAdminKey } from "./admin";
-
 export type PositionView = {
   market: string;
   symbol: string;
@@ -57,6 +55,17 @@ export type AgentView = {
   valuation: PortfolioValuationSummary;
 };
 
+export type PredictionLeaderboardRow = {
+  userId: string;
+  userName: string;
+  predictions: number;
+  settledPredictions: number;
+  avgBrier: number | null;
+  avgEdge: number | null;
+  avgConviction: number | null;
+  avgTimeToResolutionHours: number | null;
+};
+
 export type MarketView = {
   marketId: string;
   marketName: string;
@@ -94,6 +103,7 @@ export type OverviewResponse = {
   };
   markets: MarketView[];
   agents: AgentView[];
+  predictionLeaderboard: PredictionLeaderboardRow[];
 };
 
 export type FundingDirection = "long_pays_short" | "short_pays_long" | "neutral";
@@ -121,26 +131,19 @@ export type TimelineResponse = {
   events: TimelineEventRecord[];
 };
 
-const AUTH_ERROR_MESSAGE = "Invalid admin key. Please sign in again.";
 const API_UNAVAILABLE_MESSAGE = "API server is unavailable. Start the unimarket API on http://localhost:3100 and refresh.";
 
-export class AdminApiError extends Error {
+export class DashboardApiError extends Error {
   status: number;
   code: string | null;
-  auth: boolean;
 
-  constructor(message: string, { status, code = null, auth = false }: { status: number; code?: string | null; auth?: boolean }) {
+  constructor(message: string, { status, code = null }: { status: number; code?: string | null }) {
     super(message);
-    this.name = "AdminApiError";
+    this.name = "DashboardApiError";
     this.status = status;
     this.code = code;
-    this.auth = auth;
   }
 }
-
-export const isAdminAuthError = (error: unknown): error is AdminApiError => {
-  return error instanceof AdminApiError && error.auth;
-};
 
 const parseErrorPayload = async (response: Response): Promise<{ message: string; code: string | null }> => {
   try {
@@ -166,21 +169,12 @@ const parseErrorPayload = async (response: Response): Promise<{ message: string;
 const requestJson = async <TResponse>(
   path: string,
   {
-    adminKey = readStoredAdminKey(),
-    onAuthError,
     init,
   }: {
-    adminKey?: string;
-    onAuthError?: () => void;
     init?: RequestInit;
   } = {},
 ): Promise<TResponse> => {
-  if (!adminKey) {
-    throw new AdminApiError("Missing admin key. Please sign in.", { status: 401, auth: true });
-  }
-
   const headers = new Headers(init?.headers);
-  headers.set("Authorization", `Bearer ${adminKey}`);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -188,38 +182,26 @@ const requestJson = async <TResponse>(
   const response = await fetch(path, { ...init, headers });
 
   if (!response.ok) {
-    const isAuth = response.status === 401 || response.status === 403;
-    if (isAuth) {
-      onAuthError?.();
-    }
     const { message, code } = await parseErrorPayload(response);
-    throw new AdminApiError(isAuth ? AUTH_ERROR_MESSAGE : message, {
+    throw new DashboardApiError(message, {
       status: response.status,
       code,
-      auth: isAuth,
     });
   }
 
   return await response.json() as TResponse;
 };
 
-export const createAdminApiClient = ({
-  adminKey = readStoredAdminKey(),
-  onAuthError,
-}: {
-  adminKey?: string;
-  onAuthError?: () => void;
-}) => {
-  const request = <TResponse>(path: string, init?: RequestInit) =>
-    requestJson<TResponse>(path, { adminKey, onAuthError, init });
+export const createDashboardApiClient = () => {
+  const request = <TResponse>(path: string, init?: RequestInit) => requestJson<TResponse>(path, { init });
 
   return {
-    getOverview: () => request<OverviewResponse>("/api/admin/overview"),
+    getOverview: () => request<OverviewResponse>("/api/dashboard/overview"),
     getEquityHistory: (range: string) =>
-      request<EquityHistoryResponse>(`/api/admin/equity-history?range=${encodeURIComponent(range)}`),
+      request<EquityHistoryResponse>(`/api/dashboard/equity-history?range=${encodeURIComponent(range)}`),
     getUserTimeline: (userId: string, { limit, offset }: { limit: number; offset: number }) =>
-      request<TimelineResponse>(`/api/admin/users/${userId}/timeline?limit=${limit}&offset=${offset}`),
+      request<TimelineResponse>(`/api/dashboard/users/${userId}/timeline?limit=${limit}&offset=${offset}`),
   };
 };
 
-export type AdminApiClient = ReturnType<typeof createAdminApiClient>;
+export type DashboardApiClient = ReturnType<typeof createDashboardApiClient>;

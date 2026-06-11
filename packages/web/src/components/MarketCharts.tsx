@@ -7,7 +7,7 @@ import {
   chartPalette,
   formatCompactNumber,
   formatTooltipCurrency,
-} from "../lib/admin";
+} from "../lib/dashboard";
 
 export const MarketCharts = ({
   marketChartData,

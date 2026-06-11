@@ -7,10 +7,10 @@ This guide covers the operator-facing dashboard and admin-only API surface.
 Admins can:
 - create agent users
 - fund and withdraw from user accounts
-- inspect portfolio and audit history across users
+- inspect protected operational portfolio details
 - monitor funding, liquidation, and equity trends
 
-The dashboard and admin API are intentionally observational and operational: they are for account setup, portfolio review, agent audit, and incident follow-up, not manual or proxy trading. Agents place orders through their own user API keys, and the platform simulates fills, reconciliation, settlement, liquidation, PnL, and audit events from those agent-originated writes.
+The dashboard is a read-only observation surface. The admin API is for account setup and operational follow-up, not manual or proxy trading. Agents place orders through their own user API keys, and the platform simulates fills, reconciliation, settlement, liquidation, PnL, and audit events from those agent-originated writes.
 
 ## Dashboard Design Contract
 
@@ -24,11 +24,11 @@ The dashboard should look and behave like an operator review console, not a trad
 
 ## Using the Dashboard
 
-### Login
+### Access
 
-1. Start the API with `ADMIN_API_KEY` configured.
+1. Start the API.
 2. Open the dashboard.
-3. Authenticate with `Authorization: Bearer <ADMIN_API_KEY>` through the login page.
+3. Review the live observation views. The dashboard does not require an admin password.
 
 Typical local URLs:
 - dashboard dev server: `http://localhost:5173`
@@ -45,6 +45,7 @@ The overview screen shows:
 - per-user cards with balances, equity, and top holdings
 - market-level summary data across all tracked positions
 - equity trend charts backed by the background equity snapshotter worker
+- a prediction benchmark leaderboard from resolved agent-submitted probabilities
 
 Valuation semantics:
 - portfolio and overview reads preserve factual positions even when a mark price is unavailable
@@ -57,6 +58,16 @@ A user detail view shows:
 - current balance and open positions
 - perp risk fields such as leverage and liquidation price when applicable
 - recent activity merged from orders, journals, funding, and liquidation audits
+
+## Dashboard Read API
+
+The dashboard uses anonymous, read-only endpoints:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/dashboard/overview` | Cross-user portfolio, valuation, market summary, and prediction leaderboard |
+| `GET` | `/api/dashboard/equity-history` | Historical equity snapshots grouped by user |
+| `GET` | `/api/dashboard/users/:id/timeline` | One user's merged audit timeline |
 
 ## Admin API Endpoints
 
@@ -90,14 +101,12 @@ curl -X POST http://localhost:3100/api/admin/users/<userId>/deposit \
   -d '{"amount":100000}'
 ```
 
-### Read models
+### Protected operational reads
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/admin/overview` | Cross-user portfolio and market summary |
 | `GET` | `/api/admin/users/:id/portfolio` | One user's balance, positions, open orders, and recent orders |
-| `GET` | `/api/admin/users/:id/timeline` | One user's merged audit timeline |
-| `GET` | `/api/admin/equity-history` | Historical equity snapshots grouped by user |
+| `GET` | `/api/admin/users/:id/symbol-trades` | One user's recent trades for a specific market symbol |
 
 ### Order execution boundary
 
@@ -105,12 +114,13 @@ Admins do not place orders on behalf of users. Order writes belong to agent/user
 
 This keeps the product boundary simple:
 - agents decide and submit orders
+- agents may attach prediction probabilities and conviction snapshots to order writes
 - the trading engine simulates fills and persists accounting state
-- operators review exposure, PnL, valuation health, and audit timelines
+- operators review exposure, PnL, valuation health, prediction benchmarks, and audit timelines
 
 ## Timeline Semantics
 
-Admin timelines use the same merged event builder as user timelines.
+Dashboard timelines use the same merged event builder as user timelines.
 The event record shape is shared through `@unimarket/core`, so the dashboard and API stay on one timeline contract.
 
 Current timeline event types:
@@ -172,7 +182,7 @@ For operators, that means the activity feed can now show:
 
 ## Operational Notes
 
-- `GET /api/admin/overview` is read-only. Equity snapshots are recorded by the background equity snapshotter worker.
+- `GET /api/dashboard/overview` is read-only. Equity snapshots are recorded by the background equity snapshotter worker.
 - when overview or per-user portfolio valuation is partial, treat aggregate equity and PnL as incomplete until pricing recovers
 - Admin API does not expose order placement. Use agent/user API keys for order writes.
 - If you see liquidation events, always check the paired portfolio state and recent funding for context.

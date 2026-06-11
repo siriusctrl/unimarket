@@ -59,6 +59,38 @@ describe("schemas", () => {
     expect(fractionalQuantity.success).toBe(true);
   });
 
+  it("accepts optional prediction snapshots on orders", () => {
+    const valid = placeOrderSchema.safeParse({
+      market: "polymarket",
+      reference: "market-ref",
+      side: "buy",
+      type: "market",
+      quantity: 10,
+      reasoning: "The market underprices the Yes outcome",
+      prediction: {
+        outcome: "Yes",
+        probability: 0.64,
+        conviction: 0.72,
+        thesis: "Base rate and recent signal both moved higher",
+      },
+    });
+    expect(valid.success).toBe(true);
+
+    const invalid = placeOrderSchema.safeParse({
+      market: "polymarket",
+      reference: "market-ref",
+      side: "buy",
+      type: "market",
+      quantity: 10,
+      reasoning: "The market underprices the Yes outcome",
+      prediction: {
+        outcome: "Yes",
+        probability: 1.2,
+      },
+    });
+    expect(invalid.success).toBe(false);
+  });
+
   it("coerces and defaults pagination + order list query params", () => {
     const pagination = paginationQuerySchema.parse({});
     expect(pagination).toEqual({ limit: 20, offset: 0 });

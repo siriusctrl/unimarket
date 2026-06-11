@@ -115,6 +115,46 @@ const migrationStatements = [
   `CREATE INDEX IF NOT EXISTS trades_account_id_idx ON trades(account_id)`,
   `CREATE INDEX IF NOT EXISTS trades_order_id_idx ON trades(order_id)`,
   `
+  CREATE TABLE IF NOT EXISTS predictions (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    side TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    probability REAL NOT NULL,
+    conviction REAL,
+    thesis TEXT,
+    entry_price REAL,
+    submitted_at TEXT NOT NULL
+  )
+  `,
+  `CREATE UNIQUE INDEX IF NOT EXISTS predictions_order_id_uq ON predictions(order_id)`,
+  `CREATE INDEX IF NOT EXISTS predictions_user_id_idx ON predictions(user_id)`,
+  `CREATE INDEX IF NOT EXISTS predictions_account_market_symbol_idx ON predictions(account_id, market, symbol)`,
+  `CREATE INDEX IF NOT EXISTS predictions_submitted_at_idx ON predictions(submitted_at)`,
+  `
+  CREATE TABLE IF NOT EXISTS prediction_scores (
+    id TEXT PRIMARY KEY,
+    prediction_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    market TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    version TEXT NOT NULL,
+    value REAL NOT NULL,
+    details TEXT NOT NULL,
+    scored_at TEXT NOT NULL
+  )
+  `,
+  `CREATE UNIQUE INDEX IF NOT EXISTS prediction_scores_metric_version_uq ON prediction_scores(prediction_id, metric, version)`,
+  `CREATE INDEX IF NOT EXISTS prediction_scores_user_metric_idx ON prediction_scores(user_id, metric)`,
+  `CREATE INDEX IF NOT EXISTS prediction_scores_order_id_idx ON prediction_scores(order_id)`,
+  `
   CREATE TABLE IF NOT EXISTS journal (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,

@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, LayoutDashboard, LogOut, Menu, Moon, Sun, X } from "lucide-react";
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ClipboardList, LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
-import { clearAdminKey } from "../lib/admin";
 import { applyTheme, persistTheme, readStoredTheme, type ThemeMode } from "../lib/theme";
 
 export const Layout = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -21,11 +19,6 @@ export const Layout = () => {
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);
-
-  const handleLogout = () => {
-    clearAdminKey();
-    navigate("/login", { replace: true });
-  };
 
   const handleThemeToggle = () => {
     setTheme((previous) => (previous === "dark" ? "light" : "dark"));
@@ -65,10 +58,6 @@ export const Layout = () => {
             <Button variant="outline" size="icon" onClick={handleThemeToggle} aria-label="Toggle theme">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button variant="outline" onClick={handleLogout} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
           </div>
 
           <Button
@@ -103,10 +92,6 @@ export const Layout = () => {
               <div className="flex items-center justify-end gap-2 pt-1">
                 <Button variant="outline" size="icon" onClick={handleThemeToggle} aria-label="Toggle theme">
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </Button>
-                <Button variant="outline" onClick={handleLogout} className="gap-2">
-                  <LogOut className="h-4 w-4" />
-                  Logout
                 </Button>
               </div>
             </div>

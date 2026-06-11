@@ -132,6 +132,54 @@ export const trades = sqliteTable(
   ],
 );
 
+export const predictions = sqliteTable(
+  "predictions",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id").notNull(),
+    accountId: text("account_id").notNull(),
+    userId: text("user_id").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    side: text("side").notNull(),
+    outcome: text("outcome").notNull(),
+    probability: real("probability").notNull(),
+    conviction: real("conviction"),
+    thesis: text("thesis"),
+    entryPrice: real("entry_price"),
+    submittedAt: text("submitted_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("predictions_order_id_uq").on(table.orderId),
+    index("predictions_user_id_idx").on(table.userId),
+    index("predictions_account_market_symbol_idx").on(table.accountId, table.market, table.symbol),
+    index("predictions_submitted_at_idx").on(table.submittedAt),
+  ],
+);
+
+export const predictionScores = sqliteTable(
+  "prediction_scores",
+  {
+    id: text("id").primaryKey(),
+    predictionId: text("prediction_id").notNull(),
+    orderId: text("order_id").notNull(),
+    accountId: text("account_id").notNull(),
+    userId: text("user_id").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    metric: text("metric").notNull(),
+    version: text("version").notNull(),
+    value: real("value").notNull(),
+    details: text("details").notNull(),
+    scoredAt: text("scored_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("prediction_scores_metric_version_uq").on(table.predictionId, table.metric, table.version),
+    index("prediction_scores_user_metric_idx").on(table.userId, table.metric),
+    index("prediction_scores_order_id_idx").on(table.orderId),
+  ],
+);
+
 export const journal = sqliteTable(
   "journal",
   {

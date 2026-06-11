@@ -203,14 +203,15 @@ MISSING_REASONING_CODE="$(curl -sS -o /tmp/unimarket-missing-reasoning.out -w "%
   -d "{\"market\":\"$TRADE_MARKET\",\"reference\":\"$TRADE_SYMBOL\",\"side\":\"buy\",\"type\":\"market\",\"quantity\":1}")"
 [[ "$MISSING_REASONING_CODE" == "400" ]] || { echo "expected 400 for missing reasoning"; exit 1; }
 
-echo "[8/8] Optional admin checks"
+echo "[8/8] Dashboard and optional admin checks"
+curl -sS "$BASE_URL/api/dashboard/users/$USER_ID/timeline?limit=20&offset=0" >/dev/null
+curl -sS "$BASE_URL/api/dashboard/overview" >/dev/null
+curl -sS "$BASE_URL/api/dashboard/equity-history?range=1w" >/dev/null
+
 if [[ -n "$ADMIN_API_KEY" ]]; then
   admin_post "/api/admin/users/$USER_ID/deposit" '{"amount":100}' >/dev/null
   admin_post "/api/admin/users/$USER_ID/withdraw" '{"amount":100}' >/dev/null
-  admin_get "/api/admin/users/$USER_ID/timeline?limit=20&offset=0" >/dev/null
   admin_get "/api/admin/users/$USER_ID/portfolio" >/dev/null
-  admin_get "/api/admin/overview" >/dev/null
-  admin_get "/api/admin/equity-history?range=1w" >/dev/null
 fi
 
 echo "E2E smoke passed."

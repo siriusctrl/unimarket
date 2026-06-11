@@ -8,7 +8,7 @@ import type { MarketAdapter, MarketRegistry, TradingConstraints } from "@unimark
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../db/client.js";
-import { accounts, orderExecutionParams, orders, perpPositionState, positions, trades } from "../db/schema.js";
+import { accounts, orderExecutionParams, orders, perpPositionState, positions, predictions, trades } from "../db/schema.js";
 import { eventBus } from "../platform/events.js";
 import { getTakerFeeRate } from "../fees.js";
 import { getFirst } from "../platform/helpers.js";
@@ -36,6 +36,7 @@ type FillableOrder = {
   side: PlaceOrderInput["side"];
   quantity: number;
   reasoning: string;
+  prediction?: PlaceOrderInput["prediction"];
 };
 
 type OrderPlacementError = {
@@ -133,6 +134,49 @@ const quoteSidePrice = (
   price: { price: number; bid?: number; ask?: number },
 ): number => {
   return side === "buy" ? (price.ask ?? price.price) : (price.bid ?? price.price);
+};
+
+type PredictionTx = {
+  insert: typeof db.insert;
+};
+
+const persistOrderPrediction = async (
+  tx: PredictionTx,
+  {
+    orderId,
+    account,
+    order,
+    entryPrice,
+    submittedAt,
+  }: {
+    orderId: string;
+    account: AccountRow;
+    order: FillableOrder;
+    entryPrice: number | null;
+    submittedAt: string;
+  },
+): Promise<void> => {
+  if (!order.prediction) return;
+
+  await tx
+    .insert(predictions)
+    .values({
+      id: makeId("prd"),
+      orderId,
+      accountId: account.id,
+      userId: account.userId,
+      market: order.market,
+      symbol: order.symbol,
+      side: order.side,
+      outcome: order.prediction.outcome,
+      probability: order.prediction.probability,
+      conviction: order.prediction.conviction ?? null,
+      thesis: order.prediction.thesis ?? null,
+      entryPrice,
+      submittedAt,
+    })
+    .onConflictDoNothing()
+    .run();
 };
 
 export const createOrderPlacementService = (registry: MarketRegistry) => {
@@ -268,6 +312,14 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
           })
           .onConflictDoNothing()
           .run();
+
+        await persistOrderPrediction(tx, {
+          orderId,
+          account: latestAccount,
+          order,
+          entryPrice: executionPrice,
+          submittedAt: createdAt,
+        });
       } else {
         const claimedOrder = await tx
           .update(orders)
@@ -488,14 +540,17 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
 
     if (order.type === "limit") {
       let executionPrice: number | null = null;
+      let observedPrice: number | null = null;
       try {
         const quote = await adapter.getQuote(normalizedSymbol);
         const candidatePrice = quoteSidePrice(order.side, quote);
+        observedPrice = candidatePrice;
         const limitPrice = order.limitPrice as number;
         const shouldFillNow = order.side === "buy" ? candidatePrice <= limitPrice : candidatePrice >= limitPrice;
         if (shouldFillNow) executionPrice = candidatePrice;
       } catch {
         executionPrice = null;
+        observedPrice = null;
       }
 
       if (executionPrice === null) {
@@ -528,6 +583,20 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
             })
             .onConflictDoNothing()
             .run();
+          await persistOrderPrediction(tx, {
+            orderId,
+            account,
+            order: {
+              market: order.market,
+              symbol: normalizedSymbol,
+              side: order.side,
+              quantity: order.quantity,
+              reasoning: order.reasoning,
+              prediction: order.prediction,
+            },
+            entryPrice: observedPrice,
+            submittedAt: createdAt,
+          });
         });
         return { kind: "pending", order: baseOrder };
       }
@@ -541,6 +610,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
           side: order.side,
           quantity: order.quantity,
           reasoning: order.reasoning,
+          prediction: order.prediction,
         },
         executionPrice,
         createdAt,
@@ -568,6 +638,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
         side: order.side,
         quantity: order.quantity,
         reasoning: order.reasoning,
+        prediction: order.prediction,
       },
       executionPrice,
       createdAt,

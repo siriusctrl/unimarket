@@ -1,6 +1,6 @@
 ---
 name: unimarket
-description: Agent-run multi-market paper trading workflow using the Unimarket REST API. Use when Codex needs to register an agent user, discover markets dynamically, inspect quotes, orderbooks, price history, funding, or resolution data, place or cancel paper orders with the agent/user API key, review account state, write journal entries, or consume SSE events against Unimarket. Admin credentials and dashboards are for setup, observation, and review, not proxy order placement.
+description: Agent-run multi-market paper trading workflow using the Unimarket REST API. Use when Codex needs to register an agent user, discover markets dynamically, inspect quotes, orderbooks, price history, funding, or resolution data, place or cancel paper orders with the agent/user API key, review account state, write journal entries, or consume SSE events against Unimarket. Admin credentials are for setup, while dashboards are for observation and review, not proxy order placement.
 ---
 
 # Unimarket
@@ -25,7 +25,7 @@ Authentication:
    - `GET /api/markets/{market}/quote?reference=...`
    - optional `orderbook`, `price-history`, `funding`, `resolve`
 6. Prefer helper workflow commands such as `snapshot`, `orders-open`, `history-summary`, and `scan` for deterministic decision prep.
-7. Place or cancel orders with non-empty `reasoning`.
+7. Place or cancel orders with non-empty `reasoning`; attach `prediction` when making a forecast-backed order.
 8. Audit with `orders`, `positions`, `portfolio`, `timeline`, `journal`, and `events`.
 
 ## Operating Rules
@@ -43,6 +43,8 @@ Authentication:
   - `mid`: midpoint when both `bid` and `ask` exist, otherwise `price`
   - `spreadAbs` and `spreadBps`: only meaningful when both sides exist
 - Satisfy `minQuantity`, `quantityStep`, `supportsFractional`, and `maxLeverage` before `POST /api/orders`.
+- When placing a prediction-market order, include `prediction.outcome`, `prediction.probability`, and optional `prediction.conviction` so benchmark scoring can run after resolution.
+- Treat `prediction.conviction` as the model's submitted execution confidence, not the platform score.
 - Include `Idempotency-Key` on retryable writes:
   - `POST /api/orders`
   - `DELETE /api/orders/:id`
@@ -84,12 +86,13 @@ Preferred workflow commands:
 - `orders-open [limit] [offset]` for duplicate-order prevention without guessing query params
 - `history-summary <market> <reference> [interval] [lookback] [as_of]` for summary + last candles without full-history plumbing
 - `scan <market> <references_csv> [interval] [lookback] [as_of]` for shortlist preparation with constraints, quotes, orderbook summaries, optional funding, and optional history summaries
+- `order-json <payload_json> [idempotency_key]` for forecast-backed orders that include a `prediction` object
 
 Core commands still available:
 - `register`, `markets`, `browse`, `search`
 - `constraints`, `quote`, `quotes`, `orderbook`, `orderbooks`, `funding`, `fundings`, `resolve`
 - `history`, `history-range`
-- `buy`, `sell`, `cancel`, `orders`, `orders-history`, `orders-status`
+- `buy`, `sell`, `order-json`, `cancel`, `orders`, `orders-history`, `orders-status`
 - `account`, `portfolio`, `positions`, `timeline`, `journal-add`, `journal-list`, `events`
 
 Use `history` when you need the full candle payload:

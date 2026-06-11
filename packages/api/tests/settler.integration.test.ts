@@ -79,6 +79,8 @@ const insertPosition = async (params: {
 };
 
 const resetDatabase = async (): Promise<void> => {
+  await sqlite.execute("DELETE FROM prediction_scores");
+  await sqlite.execute("DELETE FROM predictions");
   await sqlite.execute("DELETE FROM trades");
   await sqlite.execute("DELETE FROM liquidations");
   await sqlite.execute("DELETE FROM order_execution_params");
@@ -128,6 +130,24 @@ describe("settler integration", () => {
   it("settles resolved positions, records trades, updates balance, and emits events", async () => {
     await insertUserAndAccount({ userId: "u1", accountId: "a1", balance: 100 });
     await insertPosition({ id: "p1", accountId: "a1", market: "resolve-ok", symbol: "YES", quantity: 10 });
+    await db
+      .insert(tables.predictions)
+      .values({
+        id: "prd_1",
+        orderId: "ord_1",
+        accountId: "a1",
+        userId: "u1",
+        market: "resolve-ok",
+        symbol: "YES",
+        side: "buy",
+        outcome: "yes",
+        probability: 0.6,
+        conviction: 0.7,
+        thesis: "test forecast",
+        entryPrice: 0.5,
+        submittedAt: "2026-03-07T00:00:00.000Z",
+      })
+      .run();
 
     const registry = new MarketRegistry();
     registry.register(
@@ -176,8 +196,16 @@ describe("settler integration", () => {
         quantity: 10,
         settlementPrice: 0.8,
         proceeds: 8,
+        scoredPredictions: 1,
       },
     });
+
+    const scoreRows = await db.select().from(tables.predictionScores).where(eq(tables.predictionScores.predictionId, "prd_1")).all();
+    expect(scoreRows).toHaveLength(3);
+    const scoreByMetric = new Map(scoreRows.map((row) => [row.metric, row]));
+    expect(scoreByMetric.get("brier")?.value).toBeCloseTo(0.04, 6);
+    expect(scoreByMetric.get("entry_edge")?.value).toBeCloseTo(0.1, 6);
+    expect(scoreByMetric.get("time_to_resolution_hours")?.value).toBeGreaterThan(0);
   });
 
   it("skips positions when adapter is missing, lacks resolve, throws, unresolved, missing price, or account is absent", async () => {

@@ -217,7 +217,13 @@ Idempotency-Key: <optional>
   "side": "buy",
   "type": "market",
   "quantity": 10,
-  "reasoning": "Momentum improving while spread remains tight"
+  "reasoning": "Momentum improving while spread remains tight",
+  "prediction": {
+    "outcome": "Yes",
+    "probability": 0.64,
+    "conviction": 0.72,
+    "thesis": "Base rate and recent signal both moved higher"
+  }
 }
 ```
 
@@ -226,6 +232,12 @@ Optional fields:
 - `limitPrice`
 - `leverage`
 - `reduceOnly`
+- `prediction`
+
+Prediction notes:
+- `probability` is the model's submitted forecast for the named `outcome`
+- `conviction` is a model-submitted execution confidence signal, not the platform score
+- platform scoring is computed later from resolved outcomes and can be versioned independently
 
 ### Cancel order
 

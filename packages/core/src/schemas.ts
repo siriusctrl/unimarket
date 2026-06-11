@@ -12,6 +12,13 @@ export const orderTypeSchema = z.enum(["market", "limit"]);
 export const orderStatusSchema = z.enum(["pending", "filled", "cancelled", "rejected"]);
 export const ordersViewSchema = z.enum(["all", "open", "history"]);
 
+export const orderPredictionSchema = z.object({
+  outcome: z.string().trim().min(1),
+  probability: z.number().min(0).max(1),
+  conviction: z.number().min(0).max(1).optional(),
+  thesis: z.string().trim().min(1).optional(),
+});
+
 export const placeOrderSchema = z
   .object({
     accountId: idSchema.optional(),
@@ -24,6 +31,7 @@ export const placeOrderSchema = z
     leverage: z.number().positive().max(100).optional(),
     reduceOnly: z.boolean().optional(),
     reasoning: reasoningSchema,
+    prediction: orderPredictionSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type === "limit" && typeof value.limitPrice !== "number") {
@@ -163,6 +171,7 @@ export const adminAmountSchema = z.object({
 });
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
+export type OrderPredictionInput = z.infer<typeof orderPredictionSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CreateJournalInput = z.infer<typeof createJournalSchema>;

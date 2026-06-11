@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type AdminApiClient, isAdminAuthError, type OverviewResponse } from "./admin-api";
+import { type DashboardApiClient, type OverviewResponse } from "./dashboard-api";
 
-export const useAdminOverview = ({
+export const useDashboardOverview = ({
   client,
-  enabled,
 }: {
-  client: AdminApiClient;
-  enabled: boolean;
+  client: DashboardApiClient;
 }) => {
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +17,6 @@ export const useAdminOverview = ({
 
   const fetchOverview = useCallback(
     async (): Promise<void> => {
-      if (!enabled) {
-        setError("Missing admin key. Please sign in.");
-        setOverview(null);
-        return;
-      }
-
       setLoading(true);
 
       try {
@@ -32,9 +24,6 @@ export const useAdminOverview = ({
         setOverview(payload);
         setError(null);
       } catch (fetchError) {
-        if (isAdminAuthError(fetchError)) {
-          return;
-        }
         // Only show error if we have no data yet — otherwise keep stale data visible
         if (!overviewRef.current) {
           if (fetchError instanceof Error) {
@@ -47,14 +36,13 @@ export const useAdminOverview = ({
         setLoading(false);
       }
     },
-    [client, enabled],
+    [client],
   );
 
   // Fetch once on mount
   useEffect(() => {
-    if (!enabled) return;
     void fetchOverview();
-  }, [enabled, fetchOverview]);
+  }, [fetchOverview]);
 
   return {
     overview,

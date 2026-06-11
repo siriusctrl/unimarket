@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type AdminApiClient, isAdminAuthError, type EquityHistoryResponse } from "./admin-api";
+import { type DashboardApiClient, type EquityHistoryResponse } from "./dashboard-api";
 
 export const useEquityHistory = ({
   client,
-  enabled,
   range = "1m",
 }: {
-  client: AdminApiClient;
-  enabled: boolean;
+  client: DashboardApiClient;
   range?: string;
 }) => {
   const [data, setData] = useState<EquityHistoryResponse | null>(null);
@@ -18,30 +16,23 @@ export const useEquityHistory = ({
   dataRef.current = data;
 
   const fetchHistory = useCallback(async () => {
-    if (!enabled) {
-      return;
-    }
     setLoading(true);
     try {
       const payload = await client.getEquityHistory(range);
       setData(payload);
       setError(null);
     } catch (error) {
-      if (isAdminAuthError(error)) {
-        return;
-      }
       if (!dataRef.current) {
         setError(error instanceof Error ? error.message : "Failed to load equity history");
       }
     } finally {
       setLoading(false);
     }
-  }, [client, enabled, range]);
+  }, [client, range]);
 
   useEffect(() => {
-    if (!enabled) return;
     void fetchHistory();
-  }, [enabled, fetchHistory]);
+  }, [fetchHistory]);
 
   return { data, loading, error, refresh: fetchHistory };
 };

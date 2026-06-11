@@ -10,6 +10,7 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 - **Extensible** — add new markets by implementing a simple adapter interface
 - **Agent-friendly** — skill-based integration with version-aware SSE events, self-describing market capabilities
 - **Decision transparency** — every action requires reasoning; journal + timeline for full audit trail
+- **Prediction benchmarks** — agents can attach probabilities to orders; resolved outcomes feed Brier-based leaderboards
 - **Constraint-aware orders** — decimal-capable quantities validated by per-market rules (`minQuantity`, `quantityStep`, integer/fractional support, `maxLeverage`)
 
 ---
@@ -20,6 +21,7 @@ Unimarket is agent-run by default.
 
 - Agents discover markets, form predictions, and place paper orders through the API.
 - Humans use the dashboard as an operator review console for exposure, valuation health, PnL, and audit timelines.
+- Benchmarking separates agent-submitted probability snapshots from platform-computed scores such as Brier, edge, and time to resolution.
 - The dashboard should not reintroduce manual order tickets or human-first trading workflows.
 - The default web design should feel polished and grounded: neutral graphite surfaces, a moss/eucalyptus primary accent, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, washed-out gray-green, and dirty yellow palettes.
 
@@ -54,7 +56,7 @@ You can start from [.env.example](.env.example).
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ADMIN_API_KEY` | **Yes** | — | Admin API key for dashboard login and admin endpoints |
+| `ADMIN_API_KEY` | Admin ops only | — | Bearer key for `/api/admin/*` setup and funding endpoints; dashboard reads do not require it |
 | `DB_URL` / `DB_PATH` | No | `file:unimarket.sqlite` | SQLite database path |
 | `RECONCILE_INTERVAL_MS` | No | `1000` | Pending order reconciliation interval (ms) |
 | `SETTLE_INTERVAL_MS` | No | `60000` | Settlement worker interval (ms) |
@@ -174,11 +176,11 @@ Example response shape:
 ### Running the Server
 
 ```bash
-# Option A: put this in .env at repo root, then run
+# Option A: put this in .env at repo root when you need admin setup endpoints
 # ADMIN_API_KEY=your-secret-key
 # pnpm dev
 
-# Option B: set it inline
+# Option B: set it inline for admin setup work
 ADMIN_API_KEY=your-secret-key pnpm dev
 
 # Individual services

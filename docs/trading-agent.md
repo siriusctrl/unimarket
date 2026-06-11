@@ -307,6 +307,6 @@ Useful operator views while an agent is running:
 5. Create `.state/memory.md` as a deeper notebook for durable lessons and reusable hypotheses.
 6. Write `AGENTS.md`, the cycle prompt, the bootstrap helper, and the runner script.
 7. `chmod +x scripts/bootstrap-account.sh run.sh`.
-8. Start unimarket with `ADMIN_API_KEY` configured using `corepack pnpm dev` so both the API and dashboard are available.
+8. Start unimarket with `corepack pnpm dev`; configure `ADMIN_API_KEY` only when you need admin setup endpoints.
 9. Launch the runner inside `tmux`.
 10. Monitor the dashboard, timeline, portfolio, SSE stream, local logs, and watchlist evolution.

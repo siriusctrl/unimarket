@@ -76,8 +76,9 @@ All state-changing order flows follow the same broad structure.
 5. Validate quantity step, minimum quantity, fractional support, and optional max leverage.
 6. Fetch a fresh quote.
 7. Either fill immediately or store a pending limit order.
-8. Persist resulting account, order, trade, and position state.
-9. Emit SSE events and expose the result through timeline and portfolio reads.
+8. Persist any agent-submitted prediction snapshot attached to the order.
+9. Persist resulting account, order, trade, and position state.
+10. Emit SSE events and expose the result through timeline and portfolio reads.
 
 Agent/user order entry runs the trading engine logic. Admin APIs do not place orders on behalf of users; operators observe and fund accounts while agent-owned credentials submit the state-changing order writes.
 
@@ -340,12 +341,26 @@ unimarket preserves the decision trace across several layers.
 Agent/user-initiated writes require `reasoning`. Admin credentials are for setup and observation, not proxy order placement.
 System workers also persist readable synthetic reasoning for actions such as settlement and liquidation.
 
+### Prediction snapshots and scoring
+
+Agents may attach a `prediction` object to an order with `outcome`, `probability`, optional `conviction`, and optional `thesis`.
+The prediction is recorded as submitted agent output; benchmark scores are platform-computed later.
+
+For resolved prediction-market positions, the settler writes versioned prediction scores:
+- `brier`: `(probability - settlementPrice)^2`
+- `time_to_resolution_hours`: hours between prediction submission and settlement scoring
+- `entry_edge`: submitted probability minus entry price for buys, reversed for sells
+
+The dashboard leaderboard uses these platform-computed scores while keeping PnL and forecast quality separate.
+
 ### Database records
 
 Important audit tables include:
 - `orders`
 - `order_execution_params`
 - `trades`
+- `predictions`
+- `prediction_scores`
 - `positions`
 - `perp_position_state`
 - `funding_payments`

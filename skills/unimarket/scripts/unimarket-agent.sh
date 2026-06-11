@@ -269,6 +269,7 @@ Core commands:
 Trading and audit commands:
   buy <market> <reference> <quantity> <reasoning> [limit_price] [idempotency_key]
   sell <market> <reference> <quantity> <reasoning> [limit_price] [idempotency_key]
+  order-json <payload_json> [idempotency_key]
   cancel <order_id> <reasoning> [idempotency_key]
   orders [query_string]
   orders-open [limit] [offset]
@@ -535,6 +536,12 @@ ENV
         --argjson quantity "$quantity" \
         '{market:$market,reference:$reference,side:$side,type:"market",quantity:$quantity,reasoning:$reasoning}')"
     fi
+    json_post '/orders' "$payload" "$idem_key"
+    ;;
+  order-json)
+    payload="${1:?payload json required}"
+    idem_key="${2:-}"
+    jq -e . >/dev/null <<<"$payload" || die "payload must be valid JSON"
     json_post '/orders' "$payload" "$idem_key"
     ;;
   cancel)

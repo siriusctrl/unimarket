@@ -50,6 +50,7 @@ export type PositionSettledEvent = BaseEvent<
     settlementPrice: number;
     proceeds: number;
     settledAt: string;
+    scoredPredictions?: number;
   }
 >;
 

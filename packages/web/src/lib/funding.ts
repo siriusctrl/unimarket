@@ -1,4 +1,4 @@
-import type { FundingDirection } from "./admin-api";
+import type { FundingDirection } from "./dashboard-api";
 
 const fundingRateFormatter = new Intl.NumberFormat("en-US", {
   style: "percent",

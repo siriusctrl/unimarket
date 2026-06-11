@@ -45,6 +45,8 @@ const buildFundingAdapter = (quotePrice: number): MarketAdapter => ({
 });
 
 const resetDatabase = async (): Promise<void> => {
+  await sqlite.execute("DELETE FROM prediction_scores");
+  await sqlite.execute("DELETE FROM predictions");
   await sqlite.execute("DELETE FROM trades");
   await sqlite.execute("DELETE FROM liquidations");
   await sqlite.execute("DELETE FROM order_execution_params");

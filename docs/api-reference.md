@@ -70,9 +70,16 @@ Optional fields:
 - `limitPrice`
 - `leverage`
 - `reduceOnly`
+- `prediction`
 
 Rules:
 - `reasoning` is required for state-changing writes
+- `prediction` is an immutable agent-submitted forecast snapshot; scoring is computed later by the platform
+- prediction payload fields:
+  - `outcome`: agent's named outcome for the probability
+  - `probability`: number from `0` to `1`
+  - `conviction`: optional number from `0` to `1`
+  - `thesis`: optional short thesis text
 - `leverage` and `reduceOnly` are valid only for perp markets
 - quantity is validated against per-reference trading constraints
 - normal market-order execution uses directional executable prices: `buy -> ask`, `sell -> bid`
@@ -327,17 +334,24 @@ The full operator workflow is documented in [Admin Guide](admin-guide.md). The m
 | `POST` | `/api/admin/users/:id/deposit` | Add funds to a user's default account |
 | `POST` | `/api/admin/users/:id/withdraw` | Remove funds from a user's default account |
 | `POST` | `/api/admin/traders` | Create a dedicated agent user + default account |
-| `GET` | `/api/admin/overview` | Get cross-user portfolio and market summary |
 | `GET` | `/api/admin/users/:id/portfolio` | Get one user's current balance, positions, open orders, and recent orders |
 | `GET` | `/api/admin/users/:id/symbol-trades` | Get one user's recent trades for a specific market symbol |
-| `GET` | `/api/admin/users/:id/timeline` | Get one user's unified audit feed |
-| `GET` | `/api/admin/equity-history` | Get historical equity snapshots by user |
 
 All admin endpoints require `Authorization: Bearer <ADMIN_API_KEY>`.
 
+## Dashboard Read API
+
+The dashboard reads anonymous observation endpoints. These routes are read-only and do not require an admin key:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/dashboard/overview` | Get cross-user portfolio, valuation, market summary, and prediction leaderboard |
+| `GET` | `/api/dashboard/equity-history` | Get historical equity snapshots by user |
+| `GET` | `/api/dashboard/users/:id/timeline` | Get one user's unified audit feed |
+
 Admin read-model notes:
-- `GET /api/admin/overview` is read-only and does not write equity snapshots as a side effect
-- `GET /api/admin/equity-history` is backed by the background equity snapshotter worker
+- `GET /api/dashboard/overview` is read-only and does not write equity snapshots as a side effect
+- `GET /api/dashboard/equity-history` is backed by the background equity snapshotter worker
 - `GET /api/admin/users/:id/portfolio` mirrors the user portfolio read-model, including optional `symbolName`, prediction-market `side`, and order-level `outcome` labels when adapters can resolve them
 - overview and admin portfolio reads expose explicit partial valuation state instead of silently omitting unpriced positions
 - `GET /api/admin/users/:id/symbol-trades` returns a normalization error when the requested symbol cannot be resolved for that market

@@ -39,6 +39,7 @@ const loadModule = async (options: LoadOptions = {}) => {
     perpPositionState: { __name: "perpPositionState" },
     orderExecutionParams: { __name: "orderExecutionParams" },
     orders: { __name: "orders" },
+    predictions: { __name: "predictions" },
     trades: { __name: "trades" },
   };
 
@@ -149,6 +150,7 @@ const loadModule = async (options: LoadOptions = {}) => {
     perpPositionState: tables.perpPositionState,
     orderExecutionParams: tables.orderExecutionParams,
     orders: tables.orders,
+    predictions: tables.predictions,
     trades: tables.trades,
   }));
   vi.doMock("../src/platform/events.js", () => ({ eventBus: { emit: eventEmit } }));

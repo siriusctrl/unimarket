@@ -6,6 +6,7 @@ import { accounts, equitySnapshots, positions, users } from "../db/schema.js";
 import { formatResolvedSymbolLabel, resolveSymbolsByMarketWithCache } from "../symbol-metadata.js";
 import { makeId, nowIso } from "../utils.js";
 import { buildAccountPortfolioModelsByAccount, type AccountPortfolioModel, type PortfolioValuationSummary } from "./portfolio-read.js";
+import { buildPredictionLeaderboard, type PredictionLeaderboardRow } from "./prediction-scoring.js";
 
 type UserRow = typeof users.$inferSelect;
 type AccountRow = typeof accounts.$inferSelect;
@@ -80,6 +81,7 @@ export type AdminOverviewModel = {
     valuationStatus: "complete" | "partial";
   }>;
   agents: AdminOverviewAgent[];
+  predictionLeaderboard: PredictionLeaderboardRow[];
 };
 
 const getPrimaryAccountByUserId = (accountRows: AccountRow[]): Map<string, AccountRow> => {
@@ -127,6 +129,7 @@ export const buildAdminOverviewModel = async ({
     db.select().from(accounts).all(),
     db.select().from(positions).all(),
   ]);
+  const predictionLeaderboard = await buildPredictionLeaderboard();
   const portfolioByAccountId = await buildAccountPortfolioModelsByAccount({ accounts: accountRows, registry });
 
   const primaryAccountByUserId = getPrimaryAccountByUserId(accountRows);
@@ -301,6 +304,7 @@ export const buildAdminOverviewModel = async ({
     },
     markets,
     agents,
+    predictionLeaderboard,
   };
 };
 

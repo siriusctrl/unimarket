@@ -13,17 +13,17 @@ import {
   formatCurrency,
   formatNumber,
   formatSignedCurrency,
-} from "../lib/admin";
-import { useAdminOverview } from "../lib/useAdminOverview";
+} from "../lib/dashboard";
+import { useDashboardOverview } from "../lib/useDashboardOverview";
 import { useAgentTimeline } from "../lib/useAgentTimeline";
-import { useAdminSession } from "../lib/useAdminSession";
+import { useDashboardClient } from "../lib/useDashboardClient";
 
 export const AgentDetailPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { adminKey, client } = useAdminSession();
+  const { client } = useDashboardClient();
 
-  const { overview, error, loading, refresh } = useAdminOverview({ client, enabled: Boolean(adminKey) });
+  const { overview, error, loading, refresh } = useDashboardOverview({ client });
 
   const agent = useMemo(() => {
     if (!overview || !id) return null;
@@ -41,7 +41,7 @@ export const AgentDetailPage = () => {
     nextPage,
     prevPage,
     refresh: refreshTimeline,
-  } = useAgentTimeline({ userId: id, client, enabled: Boolean(adminKey) });
+  } = useAgentTimeline({ userId: id, client });
 
   const handleRefresh = async () => {
     await Promise.all([refresh(), refreshTimeline()]);

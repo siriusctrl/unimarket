@@ -5,6 +5,7 @@ import {
   CircleAlert,
   RefreshCw,
   Search,
+  Trophy,
   Users,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -21,10 +22,10 @@ import {
   formatCurrency,
   formatNumber,
   formatSignedCurrency,
-} from "../lib/admin";
-import { useAdminOverview } from "../lib/useAdminOverview";
+} from "../lib/dashboard";
+import { useDashboardOverview } from "../lib/useDashboardOverview";
 import { useEquityHistory } from "../lib/useEquityHistory";
-import { useAdminSession } from "../lib/useAdminSession";
+import { useDashboardClient } from "../lib/useDashboardClient";
 
 const AGENTS_PER_PAGE = 6;
 const RANGE_OPTIONS = ["1w", "1m", "3m", "6m", "1y"] as const;
@@ -37,6 +38,23 @@ const RANGE_LABELS: Record<string, string> = {
 };
 type ChartMode = "equity" | "return";
 
+const formatScore = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return "N/A";
+  return value.toFixed(4);
+};
+
+const formatSignedPercent = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return "N/A";
+  const percentage = value * 100;
+  return `${percentage > 0 ? "+" : ""}${percentage.toFixed(1)}%`;
+};
+
+const formatHours = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return "N/A";
+  if (value < 24) return `${value.toFixed(1)}h`;
+  return `${(value / 24).toFixed(1)}d`;
+};
+
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -44,12 +62,11 @@ export const DashboardPage = () => {
   const [range, setRange] = useState<string>("1m");
   const [chartMode, setChartMode] = useState<ChartMode>("equity");
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
-  const { adminKey, client } = useAdminSession();
+  const { client } = useDashboardClient();
 
-  const { overview, error, loading, refresh } = useAdminOverview({ client, enabled: Boolean(adminKey) });
+  const { overview, error, loading, refresh } = useDashboardOverview({ client });
   const { data: historyData, error: historyError, loading: historyLoading, refresh: refreshHistory } = useEquityHistory({
     client,
-    enabled: Boolean(adminKey),
     range,
   });
 
@@ -454,6 +471,67 @@ export const DashboardPage = () => {
                       ))}
                   </LineChart>
                 </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Prediction benchmark leaderboard */}
+          <Card className="border-border/75 hover:border-primary/35 animate-in fade-in-0 duration-300">
+            <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-primary" />
+                  Prediction benchmark
+                </CardTitle>
+                <CardDescription>Brier-based comparison from resolved agent predictions</CardDescription>
+              </div>
+              <Badge variant="outline">
+                {(overview.predictionLeaderboard ?? []).reduce((sum, row) => sum + row.settledPredictions, 0)} settled
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {(overview.predictionLeaderboard ?? []).length === 0 ? (
+                <div className="flex min-h-24 items-center justify-center rounded-md border border-dashed border-border/80 bg-muted/30 px-4 text-center text-sm text-muted-foreground">
+                  No scored predictions yet. Agents can attach probabilities to orders, and resolved markets will populate this benchmark.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-sm">
+                    <thead>
+                      <tr className="border-b border-border/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-2 py-2 font-semibold">Rank</th>
+                        <th className="px-2 py-2 font-semibold">Agent</th>
+                        <th className="px-2 py-2 text-right font-semibold">Avg Brier</th>
+                        <th className="px-2 py-2 text-right font-semibold">Settled</th>
+                        <th className="px-2 py-2 text-right font-semibold">Submitted</th>
+                        <th className="px-2 py-2 text-right font-semibold">Avg edge</th>
+                        <th className="px-2 py-2 text-right font-semibold">Avg timing</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(overview.predictionLeaderboard ?? []).slice(0, 8).map((row, index) => (
+                        <tr key={row.userId} className="border-b border-border/45 last:border-0">
+                          <td className="px-2 py-3 font-mono text-xs text-muted-foreground">#{index + 1}</td>
+                          <td className="px-2 py-3">
+                            <button
+                              type="button"
+                              className="text-left font-medium text-foreground hover:text-primary"
+                              onClick={() => navigate(`/agents/${row.userId}`)}
+                            >
+                              {row.userName}
+                            </button>
+                            <p className="font-mono text-xs text-muted-foreground">{row.userId}</p>
+                          </td>
+                          <td className="px-2 py-3 text-right font-mono">{formatScore(row.avgBrier)}</td>
+                          <td className="px-2 py-3 text-right font-mono">{formatNumber(row.settledPredictions)}</td>
+                          <td className="px-2 py-3 text-right font-mono">{formatNumber(row.predictions)}</td>
+                          <td className="px-2 py-3 text-right font-mono">{formatSignedPercent(row.avgEdge)}</td>
+                          <td className="px-2 py-3 text-right font-mono">{formatHours(row.avgTimeToResolutionHours)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>

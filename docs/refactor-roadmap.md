@@ -58,18 +58,18 @@ These builders now centralize:
 - open-order shaping
 - account-level totals
 
-### 2. Move Snapshot Writes Out Of `GET /api/admin/overview`
+### 2. Move Snapshot Writes Out Of Dashboard Overview Reads
 
 Priority: high
 Status: completed
 
 Problem:
 
-- the admin overview route performs asynchronous `equity_snapshots` writes after building the response
+- the overview read path previously performed asynchronous `equity_snapshots` writes after building the response
 
 Current location:
 
-- `packages/api/src/routes/admin.ts`
+- `packages/api/src/routes/dashboard.ts`
 
 Why this matters:
 
@@ -79,7 +79,7 @@ Why this matters:
 
 Implemented shape:
 
-- `/api/admin/overview` is read-only
+- `/api/dashboard/overview` is read-only
 - snapshot generation runs through `packages/api/src/workers/equity-snapshotter.ts`
 - snapshot cadence is controlled by `EQUITY_SNAPSHOT_INTERVAL_MS`
 
@@ -168,18 +168,16 @@ Status: completed
 
 Problem:
 
-- admin web code still performs repeated `fetch + auth header + auth failure handling + response parsing` logic
+- dashboard web code previously performed repeated `fetch + response parsing` logic
 
 Current locations:
 
-- other admin-facing web modules
+- other dashboard-facing web modules
 
 Implemented shape:
 
-- `packages/web/src/lib/admin-api.ts`
-- admin hooks and pages now share:
-  - auth header injection
-  - `401/403` logout handling
+- `packages/web/src/lib/dashboard-api.ts`
+- dashboard hooks and pages now share:
   - JSON error extraction
   - typed response parsing
 

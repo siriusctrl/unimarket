@@ -157,6 +157,8 @@ const fundingAdapter: MarketAdapter = {
 };
 
 const resetDatabase = async (): Promise<void> => {
+  await sqlite.execute("DELETE FROM prediction_scores");
+  await sqlite.execute("DELETE FROM predictions");
   await sqlite.execute("DELETE FROM trades");
   await sqlite.execute("DELETE FROM liquidations");
   await sqlite.execute("DELETE FROM order_execution_params");
@@ -294,6 +296,10 @@ describe("api integration", () => {
     expect(unauthorizedOrders.status).toBe(401);
     const unauthorizedPayload = await unauthorizedOrders.json();
     expect(unauthorizedPayload.error.code).toBe("UNAUTHORIZED");
+
+    const unauthorizedAdminOverview = await app.request("/api/admin/overview");
+    expect(unauthorizedAdminOverview.status).toBe(401);
+    expect((await unauthorizedAdminOverview.json()).error.code).toBe("UNAUTHORIZED");
 
     const user = await registerUser("api-not-found-user");
     const unknownApiRoute = await authedJson("/api/does-not-exist", user.apiKey);
@@ -755,6 +761,12 @@ describe("api integration", () => {
           type: "market",
           quantity: 5,
           reasoning: "market order with configured fee",
+          prediction: {
+            outcome: "Yes",
+            probability: 0.64,
+            conviction: 0.72,
+            thesis: "Observed edge versus executable ask",
+          },
         }),
       });
       expect(marketOrder.status).toBe(201);
@@ -766,6 +778,24 @@ describe("api integration", () => {
         .where(eq(tables.trades.orderId, marketOrderPayload.id as string))
         .get();
       expect(marketTrade?.fee).toBeCloseTo(0.5, 6);
+
+      const predictionRow = await db
+        .select()
+        .from(tables.predictions)
+        .where(eq(tables.predictions.orderId, marketOrderPayload.id as string))
+        .get();
+      expect(predictionRow).toMatchObject({
+        accountId: user.account.id,
+        userId: user.userId,
+        market: "polymarket",
+        symbol: "0x-fee-market",
+        side: "buy",
+        outcome: "Yes",
+        probability: 0.64,
+        conviction: 0.72,
+        thesis: "Observed edge versus executable ask",
+        entryPrice: 10,
+      });
 
       const pendingOrder = await authedJson("/api/orders", user.apiKey, {
         method: "POST",
@@ -2111,9 +2141,50 @@ describe("api integration", () => {
         type: "market",
         quantity: 5,
         reasoning: "Seed position for overview aggregation",
+        prediction: {
+          outcome: "Yes",
+          probability: 0.64,
+          conviction: 0.7,
+        },
       }),
     });
     expect(placeOrderResponse.status).toBe(201);
+    const placedOrder = await placeOrderResponse.json() as { id: string };
+    const prediction = await db.select().from(tables.predictions).where(eq(tables.predictions.orderId, placedOrder.id)).get();
+    expect(prediction).toBeTruthy();
+    await db
+      .insert(tables.predictionScores)
+      .values([
+        {
+          id: "psc_overview_brier",
+          predictionId: prediction!.id,
+          orderId: placedOrder.id,
+          accountId: user.account.id,
+          userId: user.userId,
+          market: "polymarket",
+          symbol: "0x-market-fill",
+          metric: "brier",
+          version: "v1",
+          value: 0.04,
+          details: "{}",
+          scoredAt: new Date().toISOString(),
+        },
+        {
+          id: "psc_overview_time",
+          predictionId: prediction!.id,
+          orderId: placedOrder.id,
+          accountId: user.account.id,
+          userId: user.userId,
+          market: "polymarket",
+          symbol: "0x-market-fill",
+          metric: "time_to_resolution_hours",
+          version: "v1",
+          value: 48,
+          details: "{}",
+          scoredAt: new Date().toISOString(),
+        },
+      ])
+      .run();
 
     const overviewResponse = await authedJson("/api/admin/overview", "admin_test_key");
     expect(overviewResponse.status).toBe(200);
@@ -2124,6 +2195,30 @@ describe("api integration", () => {
     expect(
       overviewPayload.agents.some((agent: { userId: string }) => agent.userId === user.userId),
     ).toBe(true);
+    expect(overviewPayload.predictionLeaderboard).toEqual([
+      expect.objectContaining({
+        userId: user.userId,
+        userName: "admin-overview-user",
+        predictions: 1,
+        settledPredictions: 1,
+        avgBrier: 0.04,
+        avgConviction: 0.7,
+        avgTimeToResolutionHours: 48,
+      }),
+    ]);
+
+    const dashboardOverviewResponse = await app.request("/api/dashboard/overview");
+    expect(dashboardOverviewResponse.status).toBe(200);
+    const dashboardOverviewPayload = await dashboardOverviewResponse.json();
+    expect(dashboardOverviewPayload.predictionLeaderboard).toEqual(overviewPayload.predictionLeaderboard);
+
+    const dashboardHistoryResponse = await app.request("/api/dashboard/equity-history?range=1m");
+    expect(dashboardHistoryResponse.status).toBe(200);
+    expect((await dashboardHistoryResponse.json()).range).toBe("1m");
+
+    const dashboardTimelineResponse = await app.request(`/api/dashboard/users/${user.userId}/timeline?limit=20&offset=0`);
+    expect(dashboardTimelineResponse.status).toBe(200);
+    expect(Array.isArray((await dashboardTimelineResponse.json()).events)).toBe(true);
 
     const indexListResult = await sqlite.execute("PRAGMA index_list('positions')");
     const hasUniqueIndex = indexListResult.rows.some((row) => {

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { accounts, positions, trades } from "../db/schema.js";
 import { eventBus } from "../platform/events.js";
+import { scoreResolvedPredictionsInTx } from "../services/prediction-scoring.js";
 import { startPeriodicWorker } from "./periodic-worker.js";
 import { makeId, nowIso } from "../utils.js";
 
@@ -60,6 +61,15 @@ export const settlePendingPositions = async (registry: MarketRegistry): Promise<
 
         const now = nowIso();
         const settlementOrderId = makeId("stl");
+        const scoredPredictions = await scoreResolvedPredictionsInTx(tx, {
+          accountId: latestPosition.accountId,
+          market: latestPosition.market,
+          symbol: latestPosition.symbol,
+          settlementPrice,
+          resolvedOutcome: resolution.outcome,
+          resolvedAt: now,
+        });
+
         await tx
           .insert(trades)
           .values({
@@ -90,6 +100,7 @@ export const settlePendingPositions = async (registry: MarketRegistry): Promise<
           settlementPrice,
           proceeds,
           settledAt: now,
+          scoredPredictions,
         };
       });
 
@@ -106,6 +117,7 @@ export const settlePendingPositions = async (registry: MarketRegistry): Promise<
             settlementPrice: didSettle.settlementPrice,
             proceeds: didSettle.proceeds,
             settledAt: didSettle.settledAt,
+            scoredPredictions: didSettle.scoredPredictions,
           },
         });
         settled += 1;
