@@ -14,6 +14,17 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 
 ---
 
+## Product Shape
+
+Unimarket is agent-run by default.
+
+- Agents discover markets, form predictions, and place paper orders through the API.
+- Humans use the dashboard as an operator review console for exposure, valuation health, PnL, and audit timelines.
+- The dashboard should not reintroduce manual order tickets or human-first trading workflows.
+- The default web design should feel polished and grounded: neutral graphite surfaces, a moss/eucalyptus primary accent, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, washed-out gray-green, and dirty yellow palettes.
+
+---
+
 ## Getting Started
 
 ```bash

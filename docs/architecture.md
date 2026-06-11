@@ -145,13 +145,14 @@ This package is where pure domain logic meets side effects.
 
 ### `packages/web`
 
-The `web` package is the operator dashboard.
+The `web` package is the operator review dashboard.
 
 It is intentionally thin:
 - reads from REST endpoints
 - centralizes authenticated admin requests in a small API client layer
 - renders portfolio, market, and timeline state
-- writes through documented admin endpoints
+- keeps visible workflows focused on observation, exposure review, and audit timelines
+- leaves order placement to agent/user APIs or explicit admin scripts instead of dashboard order tickets
 - does not reimplement trading logic in the browser
 
 ## Market Capability Model
@@ -162,7 +163,7 @@ Examples:
 - markets with `funding` are treated as perp markets
 - markets with `resolve` support settlement checks
 - markets with `orderbook` can expose live depth
-- markets with `search` and `browse` can drive discovery UX for humans and agents
+- markets with `search` and `browse` can drive discovery workflows for agents and operator review tools
 
 This avoids hardcoding business logic around a market name such as `if market === "hyperliquid"`.
 

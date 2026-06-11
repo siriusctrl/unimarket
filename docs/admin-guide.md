@@ -13,6 +13,16 @@ Admins can:
 
 The dashboard is intentionally observational: it is for portfolio review, agent audit, and incident follow-up, not manual trading. Admin order placement still exists as an API surface for scripts and operational tooling, and it uses the same validation, fill logic, accounting, and market constraints as normal user order placement.
 
+## Dashboard Design Contract
+
+The dashboard should look and behave like an operator review console, not a trading terminal.
+
+- Keep visible workflows read-oriented: overview, agent review, exposure, equity history, and audit timeline.
+- Do not add manual order tickets, buy/sell controls, or human-first market discovery as a primary dashboard path.
+- Keep agent reasoning prominent in the audit timeline because every state-changing action needs a readable "why".
+- Use the established palette direction: neutral graphite surfaces, moss/eucalyptus primary actions, and muted material chart colors such as terracotta, dusty rose, pine, and graphite.
+- Avoid common AI-dashboard styling: sci-fi cyan, purple/blue gradients, neon glows, abstract grid backgrounds, washed-out gray-green, and dirty yellow/olive casts.
+
 ## Using the Dashboard
 
 ### Login

@@ -50,6 +50,14 @@ Authentication:
 - Avoid `POST /api/orders/reconcile` in routine cycles; the background reconciler already runs.
 - Reload this skill and its references if `system.ready.data.version` changes.
 
+## Dashboard Boundary
+
+- Treat the web dashboard as an operator review console for humans, not as the primary trading surface.
+- Agents should trade through the API and helper script; humans should use the dashboard to inspect exposure, valuation health, PnL, funding/liquidation events, and audit timelines.
+- Do not reintroduce manual buy/sell order tickets, market discovery panels, or human-first trading workflows into the dashboard unless explicitly requested as a new product direction.
+- Preserve the established visual direction when touching the web UI: neutral graphite surfaces, moss/eucalyptus primary accents, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, neon glows, washed-out gray-green, and dirty yellow/olive casts.
+- Keep reasoning and journal/audit context prominent. The UI should make it easy to understand what agents did and why.
+
 ## Boundary Rules
 
 - Use `skills/unimarket/scripts/unimarket-agent.sh` for deterministic endpoint work whenever a matching command already exists.

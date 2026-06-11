@@ -159,6 +159,7 @@ Implemented shape:
 - the `/trade` route and navigation item were removed
 - manual trade-only dashboard components were deleted
 - the dashboard now centers on overview, agent detail, positions, equity history, and activity timelines
+- the visual direction is neutral graphite surfaces, moss/eucalyptus primary accents, and muted material chart colors rather than sci-fi cyan, AI purple/blue, or dirty yellow palettes
 
 ### 6. Shared Admin API Client Helpers
 
