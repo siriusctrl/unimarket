@@ -1,79 +1,81 @@
-Principles for agents contributing to this repository.
+# AGENTS.md
 
-Keep this file high-level and durable. Avoid coupling instructions to folder names, temporary endpoints, or implementation details that may change.
+This file is the operating map for agents working in this repo. Keep product
+framing in `README.md`, trading model details in `docs/trading-model.md`, and
+durable architecture in `docs/architecture.md`.
 
-## Mission
+## Source Map
 
-Build a reliable, market-agnostic paper trading platform that:
-- simulates trading safely,
-- is easy for humans and agents to integrate with through standard APIs,
-- stays easy to extend to new markets.
+- `packages/core/`: deterministic trading engine, schemas, perps, and timeline
+  primitives.
+- `packages/markets/`: market adapters, registry, cache, history, Hyperliquid,
+  and Polymarket integration.
+- `packages/api/`: HTTP API, env, fees, timeline, symbol metadata, workers, and
+  server entrypoint.
+- `packages/web/`: read-only dashboard UI.
+- `docs/api-reference.md`: user/API contract.
+- `docs/admin-guide.md`: admin-only operations.
+- `docs/architecture.md`: package boundaries and system design.
+- `docs/testing.md`: verification workflow.
+- `docs/trading-agent.md`: agent-facing trading workflow.
+- `docs/trading-model.md`: market/trading domain model.
+- `docs/codex-exec.md`: delegation prompt patterns.
 
-## Product Invariants
+## Product And Engineering Invariants
 
-1. **Simulation first**
-   - Never execute real trades or require private exchange keys for core paper-trading flows.
+- Simulation first: never execute real trades or require private exchange keys
+  for core paper-trading flows.
+- Market-agnostic by default: add markets through adapters, not scattered
+  market-specific branching.
+- State-changing actions must carry rationale and preserve an audit trail.
+- Keep user and admin operations clearly separated.
+- Authentication must map credentials to identity consistently.
+- Keep domain logic deterministic and testable.
+- Isolate network, storage, and framework side effects.
+- Validate external input and keep API errors consistent.
+- Prefer simple observable data flow over clever abstractions.
+- Do not preserve legacy behavior with compatibility branches, aliases, silent
+  fallbacks, dual reads/writes, or automatic degradation unless explicitly
+  requested.
+- If migration risk or a contract conflict appears, stop and discuss it instead
+  of inventing compatibility behavior.
 
-2. **Market agnostic by default**
-   - Core behavior must not depend on one market.
-   - Add markets through adapters, not scattered market-specific branching.
+## Task Routing
 
-3. **Explicit audit trail**
-   - State-changing actions must carry rationale.
-   - Preserve a readable timeline of what happened and why.
+- Trading engine, schemas, timeline primitives: inspect `packages/core/`.
+- Market adapter or data integration: inspect `packages/markets/`.
+- API route, worker, auth, fees, timeline, or persistence behavior: inspect
+  `packages/api/`.
+- Dashboard UI: inspect `packages/web/`.
+- Public API contract: read `docs/api-reference.md`.
+- Admin behavior: read `docs/admin-guide.md`.
+- Trading agent workflow: read `docs/trading-agent.md`.
+- Architecture or package boundary: read `docs/architecture.md`.
 
-4. **Clear permission boundaries**
-   - Keep user and admin operations clearly separated.
-   - Authentication must map credentials to identity consistently.
+## Verification
 
-5. **Self-describing integration**
-   - Agents should discover capabilities at runtime when possible.
-   - Avoid hardcoded client assumptions when discovery can be used.
+- Run `corepack pnpm -r typecheck`.
+- Run `corepack pnpm -r test`.
+- Run `corepack pnpm test` for broad repo verification.
+- Run `corepack pnpm coverage` when touching core trading, markets, or API
+  behavior where coverage matters.
+- For API contract changes, add or update focused package tests and check
+  `docs/api-reference.md`.
+- For admin-boundary changes, verify user/admin separation explicitly.
 
-## Engineering Rules
+## Docs Update Rules
 
-- Keep domain logic deterministic and testable; isolate network, storage, and framework side effects.
-- Prefer composable interfaces and adapters over growing conditionals.
-- Favor simple, observable data flow over clever abstractions.
-- Be strict at system boundaries: validate external input and keep API errors consistent.
-- Prefer KISS: solve the current problem with the simplest correct design, and do not add abstraction or compatibility machinery until it is clearly required.
-- Prefer the simplest current contract; avoid unnecessary shims, aliases, and duplicate paths unless explicitly requested.
-- Default to the best current design, not compatibility with superseded endpoints, payloads, or internal flows.
-- Do not preserve legacy behavior with compatibility branches, dual reads/writes, aliases, silent fallbacks, or automatic degradation unless explicitly requested.
-- When replacing a contract, remove or update the old path cleanly instead of carrying it forward "just in case".
-- If a change reveals migration risk, unclear requirements, or a conflict with these rules, stop and discuss it immediately instead of inventing compatibility behavior.
-- When behavior changes, update tests and docs in the same change.
+- User-visible setup or workflows: update `README.md`.
+- API contract changes: update `docs/api-reference.md`.
+- Admin behavior changes: update `docs/admin-guide.md`.
+- Architecture or package-boundary changes: update `docs/architecture.md`.
+- Test workflow changes: update `docs/testing.md`.
+- Trading-agent workflow changes: update `docs/trading-agent.md`.
+- Trading-domain changes: update `docs/trading-model.md`.
+- Delegation workflow changes: update `docs/codex-exec.md`.
 
-## Collaboration Preferences
+## Commit Rules
 
-- Prefer direct engineering judgment over repeated "do you want me to..." prompts.
-- Clearly state what is necessary, optional, or unnecessary, with a brief tradeoff when useful.
-- Ask follow-up questions only when blocked, when scope/risk materially changes, or when intent cannot be inferred.
 - Use readable Conventional Commit messages.
-- Prefer multiple focused commits when a task contains distinct logical changes.
-
-## Delegating To Codex
-
-Use `codex exec --full-auto '<task>'` for large, well-scoped implementation tasks.
-
-Rules:
-- Treat Codex as starting with no prior context.
-- Include exact file paths, required behavior, constraints, and non-goals.
-- Preserve the product invariants and the intended contract for the task, but do not add backward-compatibility shims or preserve superseded endpoints/fields unless explicitly requested.
-- Do not ask Codex to install new dependencies or change unrelated files unless explicitly required.
-- End the prompt with validation steps such as `corepack pnpm test`, `corepack pnpm typecheck`, or narrower package-specific commands.
-- Review Codex output before committing.
-
-For longer examples and prompt patterns, read `docs/codex-exec.md`.
-
-## Change Checklist
-
-Before merging, confirm:
-- market-agnostic behavior is still preserved,
-- auditability is still preserved,
-- auth and admin boundaries are still preserved,
-- API and error contracts remain consistent,
-- no unnecessary compatibility layer or silent degradation was introduced,
-- tests and docs were updated together when behavior changed.
-
-If any answer is "no" or "unclear", stop and redesign before merging.
+- Prefer multiple focused commits for distinct logical changes.
+- Do not revert unrelated user changes.
