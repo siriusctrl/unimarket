@@ -13,9 +13,7 @@ export default defineConfig({
           "vendor-charts": ["recharts"],
           "vendor-table": ["@tanstack/react-table"],
           "vendor-ui": [
-            "@radix-ui/react-accordion",
             "@radix-ui/react-slot",
-            "@radix-ui/react-tabs",
             "class-variance-authority",
             "clsx",
             "lucide-react",

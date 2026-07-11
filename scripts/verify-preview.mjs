@@ -45,7 +45,7 @@ try {
   const darkMode = await page.locator("html").evaluate((element) => element.classList.contains("dark"));
   if (!darkMode) throw new Error("Production preview did not apply the dark theme");
 
-  await page.getByRole("button", { name: "Atlas Alpha" }).click();
+  await page.getByRole("button", { name: "Atlas Alpha", exact: true }).click();
   await page.getByRole("heading", { name: "Audit timeline" }).waitFor();
 
   console.log(`Production preview verification passed: ${url}`);

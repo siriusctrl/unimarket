@@ -5,7 +5,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { LoadingState } from "../components/LoadingState";
 import { PositionsTable } from "../components/PositionsTable";
-import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import {
@@ -63,7 +62,6 @@ export const AgentDetailPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button variant="ghost" className="gap-2" onClick={() => navigate("/dashboard")}>
           <ArrowLeft className="h-4 w-4" />
@@ -75,93 +73,45 @@ export const AgentDetailPage = () => {
         </Button>
       </div>
 
-      {error ? (
-        <Card className="border-destructive/40 bg-destructive/10 shadow-none">
-          <CardContent className="flex items-center gap-2 py-4 text-sm text-destructive">
-            <CircleAlert className="h-4 w-4" />
-            {error}
-          </CardContent>
-        </Card>
-      ) : null}
+      {error ? <p className="flex items-center gap-2 border-l-2 border-destructive px-4 py-2 text-sm text-destructive"><CircleAlert className="h-4 w-4" />{error}</p> : null}
 
       {agent ? (
         <>
-          {/* Agent header */}
-          <Card className="border-primary/25 animate-in fade-in-0 slide-in-from-top-1 duration-300">
-            <CardHeader className="gap-3 md:flex-row md:items-center md:justify-between md:space-y-0">
-              <div className="space-y-2">
-                <Badge variant="secondary" className="w-fit">
-                  Agent review
-                </Badge>
-                <CardTitle className="text-3xl font-bold tracking-normal">{agent.userName}</CardTitle>
-                <CardDescription className="font-mono text-xs">{agent.userId}</CardDescription>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">
-                  {formatNumber(agent.totals.positions)} positions
-                </Badge>
-                {agent.totals.unrealizedPnl === null ? (
-                  <Badge variant="outline">PnL N/A</Badge>
-                ) : (
-                  <Badge variant={agent.totals.unrealizedPnl >= 0 ? "success" : "danger"}>
-                    {formatSignedCurrency(agent.totals.unrealizedPnl)}
-                  </Badge>
-                )}
-                {agent.valuation.status === "partial" ? (
-                  <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-                    Partial valuation
-                  </Badge>
-                ) : null}
-              </div>
-            </CardHeader>
-          </Card>
+          <header className="border-l-2 border-primary px-4 py-2">
+            <p className="text-xs font-medium text-primary">Agent review</p>
+            <h1 className="mt-1 text-3xl font-bold tracking-[-0.03em]">{agent.userName}</h1>
+            <p className="mt-1 font-mono text-xs text-muted-foreground">{agent.userId}</p>
+          </header>
 
-          {/* KPI cards */}
-          <section className="grid gap-4 md:grid-cols-3 animate-in fade-in-0 duration-300">
-            <Card className="hover:border-primary/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Cash reserve</CardTitle>
-                <CardDescription>Uncommitted paper capital</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">{formatCurrency(agent.balance)}</p>
-              </CardContent>
-            </Card>
-            <Card className="hover:border-primary/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Paper equity</CardTitle>
-                <CardDescription>
-                  {agent.valuation.status === "partial" ? "Unknown until all open positions are priced" : "Cash plus marked exposure"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">{formatCurrency(agent.totals.equity)}</p>
-              </CardContent>
-            </Card>
-            <Card className="hover:border-primary/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Unrealized PnL</CardTitle>
-                <CardDescription>Based on latest review marks</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p
-                  className={
-                    agent.totals.unrealizedPnl === null
-                      ? "text-2xl font-semibold text-muted-foreground"
-                      : agent.totals.unrealizedPnl >= 0
-                        ? "text-2xl font-semibold text-emerald-600 dark:text-emerald-400"
-                        : "text-2xl font-semibold text-rose-600 dark:text-rose-400"
-                  }
-                >
-                  {formatSignedCurrency(agent.totals.unrealizedPnl)}
-                </p>
-              </CardContent>
-            </Card>
-          </section>
+          <dl className="grid border-y border-border/70 md:grid-cols-3">
+            <div className="px-4 py-5 md:border-r md:border-border/70">
+              <dt className="text-sm text-muted-foreground">Cash reserve</dt>
+              <dd className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrency(agent.balance)}</dd>
+            </div>
+            <div className="border-t border-border/70 px-4 py-5 md:border-r md:border-t-0">
+              <dt className="text-sm text-muted-foreground">Paper equity</dt>
+              <dd className="mt-1 text-2xl font-semibold tabular-nums">{formatCurrency(agent.totals.equity)}</dd>
+            </div>
+            <div className="border-t border-border/70 px-4 py-5 md:border-t-0">
+              <dt className="text-sm text-muted-foreground">Unrealized PnL</dt>
+              <dd className={agent.totals.unrealizedPnl === null
+                ? "mt-1 text-2xl font-semibold text-muted-foreground"
+                : agent.totals.unrealizedPnl >= 0
+                  ? "mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
+                  : "mt-1 text-2xl font-semibold tabular-nums text-rose-600 dark:text-rose-400"}
+              >
+                {formatSignedCurrency(agent.totals.unrealizedPnl)}
+              </dd>
+            </div>
+          </dl>
 
-          {/* Positions + Activity */}
-          <section className="space-y-4 animate-in fade-in-0 duration-300">
-            <Card className="hover:border-primary/30">
+          <p className="text-sm text-muted-foreground">
+            {formatNumber(agent.totals.positions)} open positions
+            {agent.valuation.status === "partial" ? " · valuation incomplete" : " · valuation complete"}
+          </p>
+
+          <section className="space-y-4">
+            <Card>
               <CardHeader>
                 <CardTitle>Open exposure</CardTitle>
                 <CardDescription>Current paper holdings across markets.</CardDescription>
@@ -172,15 +122,15 @@ export const AgentDetailPage = () => {
             </Card>
 
             <div className="space-y-4">
-              {timelineError ? (
-                <Card className="border-destructive/40 bg-destructive/10 shadow-none">
-                  <CardContent className="flex items-center gap-2 py-4 text-sm text-destructive">
-                    <CircleAlert className="h-4 w-4" />
-                    {timelineError}
-                  </CardContent>
-                </Card>
-              ) : null}
-              <ActivityFeed events={events} loading={timelineLoading} page={timelinePage} hasMore={hasMore} onNextPage={nextPage} onPrevPage={prevPage} />
+              {timelineError ? <p className="border-l-2 border-destructive px-4 py-2 text-sm text-destructive">{timelineError}</p> : null}
+              <ActivityFeed
+                events={events}
+                loading={timelineLoading}
+                page={timelinePage}
+                hasMore={hasMore}
+                onNextPage={nextPage}
+                onPrevPage={prevPage}
+              />
             </div>
           </section>
         </>

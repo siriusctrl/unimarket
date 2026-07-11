@@ -147,7 +147,7 @@ export const ActivityFeed = ({
                                                 {event.data.symbol}
                                             </span>
                                         ) : null}
-                                        {event.type !== "journal" && event.data.quantity ? (
+                                        {event.type !== "journal" ? (
                                             <span className="text-xs text-muted-foreground">
                                                 ×{formatNumber(event.data.quantity)}
                                             </span>
@@ -162,7 +162,7 @@ export const ActivityFeed = ({
                                                 @ {formatCurrency(event.data.executionPrice)}
                                             </span>
                                         ) : null}
-                                        {event.type === "funding.applied" && typeof event.data.payment === "number" ? (
+                                        {event.type === "funding.applied" ? (
                                             <span className="text-xs font-medium">
                                                 {event.data.payment >= 0 ? "+" : ""}{formatCurrency(event.data.payment)}
                                             </span>
@@ -172,13 +172,13 @@ export const ActivityFeed = ({
                                         </span>
                                     </div>
 
-                                    {event.type === "journal" && event.data.content ? (
+                                    {event.type === "journal" ? (
                                         <p className="text-sm leading-relaxed text-foreground/80">
                                             {event.data.content}
                                         </p>
                                     ) : null}
 
-                                    {event.type === "journal" && event.data.tags && event.data.tags.length > 0 ? (
+                                    {event.type === "journal" && event.data.tags.length > 0 ? (
                                         <div className="flex flex-wrap gap-1 pt-0.5">
                                             {event.data.tags.map((tag) => (
                                                 <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">
@@ -190,13 +190,13 @@ export const ActivityFeed = ({
 
                                     {event.type === "funding.applied" ? (
                                         <p className="text-xs leading-relaxed text-foreground/75">
-                                            Funding rate {event.data.fundingRate?.toFixed(6) ?? "—"} applied to {event.data.market}:{event.data.symbol}.
+                                            Funding rate {event.data.fundingRate.toFixed(6)} applied to {event.data.market}:{event.data.symbol}.
                                         </p>
                                     ) : null}
 
                                     {event.type === "position.liquidated" ? (
                                         <p className="text-xs leading-relaxed text-foreground/75">
-                                            Trigger {formatCurrency(event.data.triggerPrice ?? 0)}, execution {formatCurrency(event.data.executionPrice ?? 0)}, payout {formatCurrency(event.data.netPayout ?? 0)}.
+                                            Trigger {formatCurrency(event.data.triggerPrice)}, execution {formatCurrency(event.data.executionPrice)}, payout {formatCurrency(event.data.netPayout)}.
                                         </p>
                                     ) : null}
 

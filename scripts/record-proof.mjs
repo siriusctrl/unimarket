@@ -125,8 +125,8 @@ try {
   await search.clear();
   await page.waitForTimeout(350);
 
-  await page.getByRole("button", { name: "Atlas Alpha" }).scrollIntoViewIfNeeded();
-  await page.getByRole("button", { name: "Atlas Alpha" }).click();
+  await page.getByRole("button", { name: "Atlas Alpha", exact: true }).scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "Atlas Alpha", exact: true }).click();
   await page.getByRole("heading", { name: "Atlas Alpha" }).waitFor();
   await page.waitForTimeout(650);
 
@@ -139,8 +139,10 @@ try {
 
   await page.getByRole("button", { name: "Back to overview" }).click();
   await page.getByRole("heading", { name: "Agent observation console" }).waitFor();
-  await page.waitForTimeout(650);
-  await page.screenshot({ path: screenshotPath, fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForFunction(() => window.scrollY === 0);
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
 
   await context.close();
   await browser.close();

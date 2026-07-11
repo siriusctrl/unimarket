@@ -41,7 +41,7 @@ test("operator can inspect the deterministic dashboard and agent audit trail", a
   const overviewCallsBeforeNavigation = apiCallsByPage
     .get(page)
     .filter((call) => call === "/api/dashboard/overview").length;
-  await page.getByRole("button", { name: "Atlas Alpha" }).click();
+  await page.getByRole("button", { name: "Atlas Alpha", exact: true }).click();
   await expect(page).toHaveURL(/\/agents\/agent-atlas$/);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByRole("heading", { name: "Atlas Alpha" })).toBeVisible();
