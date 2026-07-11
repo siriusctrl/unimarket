@@ -14,16 +14,13 @@ import {
   formatNumber,
   formatSignedCurrency,
 } from "../lib/dashboard";
-import { useDashboardOverview } from "../lib/useDashboardOverview";
+import { useDashboardData } from "../lib/dashboard-data";
 import { useAgentTimeline } from "../lib/useAgentTimeline";
-import { useDashboardClient } from "../lib/useDashboardClient";
 
 export const AgentDetailPage = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { client } = useDashboardClient();
-
-  const { overview, error, loading, refresh } = useDashboardOverview({ client });
+  const { client, overview, error, loading, refresh } = useDashboardData();
 
   const agent = useMemo(() => {
     if (!overview || !id) return null;

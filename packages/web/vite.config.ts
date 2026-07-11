@@ -5,6 +5,26 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-charts": ["recharts"],
+          "vendor-table": ["@tanstack/react-table"],
+          "vendor-ui": [
+            "@radix-ui/react-accordion",
+            "@radix-ui/react-slot",
+            "@radix-ui/react-tabs",
+            "class-variance-authority",
+            "clsx",
+            "lucide-react",
+            "tailwind-merge",
+          ],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

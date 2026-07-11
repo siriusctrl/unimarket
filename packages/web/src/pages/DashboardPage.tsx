@@ -23,9 +23,8 @@ import {
   formatNumber,
   formatSignedCurrency,
 } from "../lib/dashboard";
-import { useDashboardOverview } from "../lib/useDashboardOverview";
+import { useDashboardData } from "../lib/dashboard-data";
 import { useEquityHistory } from "../lib/useEquityHistory";
-import { useDashboardClient } from "../lib/useDashboardClient";
 
 const AGENTS_PER_PAGE = 6;
 const RANGE_OPTIONS = ["1w", "1m", "3m", "6m", "1y"] as const;
@@ -62,9 +61,7 @@ export const DashboardPage = () => {
   const [range, setRange] = useState<string>("1m");
   const [chartMode, setChartMode] = useState<ChartMode>("equity");
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
-  const { client } = useDashboardClient();
-
-  const { overview, error, loading, refresh } = useDashboardOverview({ client });
+  const { client, overview, error, loading, refresh } = useDashboardData();
   const { data: historyData, error: historyError, loading: historyLoading, refresh: refreshHistory } = useEquityHistory({
     client,
     range,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { ClipboardList, LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
@@ -18,6 +18,10 @@ export const Layout = () => {
 
   useEffect(() => {
     setMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
   }, [location.pathname]);
 
   const handleThemeToggle = () => {
