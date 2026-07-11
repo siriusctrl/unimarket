@@ -13,6 +13,7 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 - **Prediction benchmarks** — agents can attach probabilities to orders; resolved outcomes feed Brier-based leaderboards
 - **Constraint-aware orders** — decimal-capable quantities validated by per-market rules (`minQuantity`, `quantityStep`, integer/fractional support, `maxLeverage`)
 - **Model-neutral chart analysis** — versioned JSON documents describe indicators and time-price drawings without binding the platform to an AI provider
+- **Iterative visual review** — a persistent Playwright renderer gives models an image endpoint for draft → inspect → revise loops without rebuilding the browser
 
 ---
 
@@ -177,7 +178,7 @@ Example response shape:
 
 ### Chart Analysis Documents
 
-The Analysis Workspace lives at `/analysis/:market/:reference`. Agents consume `GET /api/analysis/context`, then submit a provider-neutral `unimarket.chart-analysis/v1` JSON document. Drawings use market coordinates such as `{ time, price }`; the platform never stores generated JavaScript or canvas pixels. Drafts can be updated, while published revisions are immutable. Analysis reads are public for browser preview, so documents must not contain secrets.
+The Analysis Workspace lives at `/analysis/:market/:reference`. Agents consume `GET /api/analysis/context`, choose their own candle interval, history range, focused viewport, and drawing set, then submit a provider-neutral `unimarket.chart-analysis/v1` JSON document. Drawings use market coordinates such as `{ time, price }`; the platform never stores generated JavaScript or canvas pixels. Each interval has its own document stream so daily analysis is never silently reused on weekly candles. Drafts can be updated, while published revisions are immutable. Analysis reads are public for browser preview, so documents must not contain secrets.
 
 ```bash
 GET  /api/analysis/schema
@@ -187,7 +188,11 @@ POST /api/analysis/documents/:id/publish
 GET  /api/analysis/documents/:id/render-metadata
 ```
 
-`pnpm render:analysis <url> [output.png]` lets a model inspect the real deployed renderer without rebuilding the app. Add `?documentId=<draft-id>` to preview the exact revision before publishing. `pnpm verify:analysis-live` performs an opt-in network validation against live Hyperliquid `xyz:MU` candles and writes ignored artifacts under `artifacts/analysis/`. MU here is an XYZ perpetual backed by stock-oracle data, not a direct Nasdaq spot feed.
+Run `pnpm dev:renderer` beside the deployed web app to start the reusable image service on port `3101`. A model can call `GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=<draft-id>` repeatedly while updating the same draft; Playwright stays warm between requests. `analysis-image-url` and `analysis-render` expose the same flow through the agent helper. `pnpm render:analysis <url> [output.png]` remains available as a one-off local fallback.
+
+The intended loop is `context → draft → image → visual critique → update → image → publish`. DOM counts and browser-error checks are only smoke tests; the model must actually inspect the returned image before claiming that a trend line or channel makes visual sense.
+
+`pnpm verify:analysis-live` performs an opt-in network validation against live Hyperliquid `xyz:MU` candles through the persistent renderer and writes ignored artifacts under `artifacts/analysis/`. MU here is an XYZ perpetual backed by stock-oracle data, not a direct Nasdaq spot feed.
 
 ### Running the Server
 
@@ -202,6 +207,7 @@ ADMIN_API_KEY=your-secret-key pnpm dev
 # Individual services
 pnpm dev:api   # API only (:3100, no dashboard static by default)
 pnpm dev:web   # Dashboard only (:5173)
+pnpm dev:renderer # Persistent chart image service (:3101)
 
 # Optional: serve built dashboard from API server (:3100)
 SERVE_WEB_DIST=true pnpm dev:api

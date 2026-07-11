@@ -123,7 +123,7 @@ Rules:
 | `GET` | `/api/analysis/schema` | public | Discover protocol, drawing, and indicator capabilities |
 | `GET` | `/api/analysis/context` | public | Fetch candles, snapshot hash, deterministic indicators, and data-quality metadata |
 | `POST` | `/api/analysis/validate` | key or admin | Validate and normalize a chart-analysis document without persistence |
-| `GET` | `/api/analysis/documents` | public | List stored documents with optional `market`, `reference`, and `status` filters |
+| `GET` | `/api/analysis/documents` | public | List stored documents with optional `market`, `reference`, `interval`, and `status` filters |
 | `POST` | `/api/analysis/documents` | key or admin | Create a draft after validating its candle snapshot |
 | `GET` | `/api/analysis/documents/:id` | public | Read one stored revision |
 | `PUT` | `/api/analysis/documents/:id` | owning key or admin | Replace a draft; published revisions are immutable |
@@ -140,9 +140,23 @@ The `unimarket.chart-context/v1` response includes canonical candles, a `sha256:
 
 Document writes use `unimarket.chart-analysis/v1`. Supported drawings are `horizontalLine`, `verticalLine`, `trendLine`, `ray`, `channel`, `rectangle`, `marker`, and `text`. Supported indicators are `sma`, `ema`, `rsi`, `atr`, `macd`, `bollingerBands`, and explicitly labeled `volumeProfile` with `ohlcv-range-approximation`.
 
+Drawing labels may set `labelPlacement.at` to `start`, `middle`, or `end` with bounded `offsetX` and `offsetY`. Marker shapes render distinctly as `circle`, `diamond`, `arrowUp`, or `arrowDown`.
+
 Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`. The API replaces `metadata.createdBy.actorId` with the authenticated identity. It rejects mismatched candle hashes with `409 SNAPSHOT_MISMATCH`, instrument changes on a draft, and every update to a published document.
 
 Analysis reads, including drafts, are intentionally public so a deployed renderer can preview an exact `documentId` before publication. Do not place credentials or private research in an analysis document.
+
+The selected document interval must match the requested context interval; mismatches return `409 INTERVAL_MISMATCH`. Create separate daily, weekly, or monthly documents instead of applying one interval's indicator parameters to another.
+
+### Chart image service
+
+The separately deployed renderer defaults to `http://<host>:3101`:
+
+```http
+GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example&scope=chart&theme=dark
+```
+
+It returns `image/png`. `scope` is `chart` or `page`; optional `width` and `height` control the browser viewport. `X-Unimarket-Render-Metadata` is base64url-encoded JSON containing the document ID, candle hash, focused viewport, rendered drawing IDs, profile-bin count, and browser errors.
 
 ### Search and browse contract
 

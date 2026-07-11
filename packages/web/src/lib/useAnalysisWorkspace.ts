@@ -26,7 +26,7 @@ export const useAnalysisWorkspace = ({
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const listed = await client.listDocuments({ market, reference });
+      const listed = await client.listDocuments({ market, reference, interval });
       let selected = documentId
         ? listed.documents.find((document) => document.id === documentId)
         : listed.documents.find((document) => document.status === "published") ?? listed.documents[0];
@@ -39,7 +39,14 @@ export const useAnalysisWorkspace = ({
       const nextDocuments = selected && !listed.documents.some((document) => document.id === selected.id)
         ? [selected, ...listed.documents]
         : listed.documents;
-      const nextContext = await client.getContext({ market, reference, interval, lookback, documentId: selected?.id });
+      const contextInterval = selected?.document.data.interval ?? interval;
+      const nextContext = await client.getContext({
+        market,
+        reference,
+        interval: contextInterval,
+        lookback,
+        documentId: selected?.id,
+      });
       setContext(nextContext);
       setDocuments(nextDocuments);
       setSelectedDocument(selected ?? null);

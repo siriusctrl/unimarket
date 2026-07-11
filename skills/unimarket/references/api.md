@@ -214,9 +214,13 @@ POST /api/analysis/documents/{id}/publish
 GET /api/analysis/documents/{id}/render-metadata
 ```
 
-Documents use `unimarket.chart-analysis/v1`. Drawings use time-price coordinates and indicator layers store deterministic calculation parameters. Create/update bodies wrap the document with non-empty `reasoning`; create may include `supersedesId`. Published revisions are immutable.
+Documents use `unimarket.chart-analysis/v1`. Drawings use time-price coordinates and indicator layers store deterministic calculation parameters. Documents are interval-specific and may contain multiple drawing layers plus a focused viewport inside the full candle snapshot. Create/update bodies wrap the document with non-empty `reasoning`; create may include `supersedesId`. Published revisions are immutable.
+
+Use `labelPlacement` when multiple structures would otherwise collide, and choose the explicit marker shape that matches the intended annotation.
 
 After creating a draft, preview that exact revision at `/analysis/{market}/{reference}?documentId={id}` before publishing it.
+
+For a model-readable image, call `GET {RENDER_BASE_URL}/render?market={market}&reference={reference}&documentId={id}` or use `analysis-image-url` / `analysis-render`. Render, inspect, critique, update, and repeat; layer-count checks alone do not approve the analysis.
 
 ## Order Writes
 

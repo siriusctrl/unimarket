@@ -182,6 +182,21 @@ describe("chart analysis protocol", () => {
       ...document,
       layers: [{ id: "bad-macd", type: "macd", fastPeriod: 20, slowPeriod: 10, signalPeriod: 4 }],
     }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      viewport: { from: candles[10].timestamp, priceScale: "auto" },
+    }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      viewport: { from: candles[20].timestamp, to: candles[10].timestamp, priceScale: "auto" },
+    }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      viewport: {
+        from: new Date(Date.parse(candles[0].timestamp) - 86_400_000).toISOString(),
+        to: candles[10].timestamp,
+      },
+    }).success).toBe(false);
   });
 
   it("reports drawings outside the declared viewport as clipped", () => {

@@ -63,6 +63,8 @@ unimarket/
 │   │       └── index.ts
 │   ├── analysis/
 │   │   └── src/             # Provider-neutral chart protocol + deterministic indicators
+│   ├── renderer/
+│   │   └── src/             # Persistent Playwright chart image service
 │   ├── markets/
 │   │   └── src/
 │   │       ├── types.ts       # MarketAdapter contract
@@ -128,6 +130,10 @@ The `analysis` package owns the versioned `unimarket.chart-analysis/v1` document
 
 Drawings use time-price coordinates. Indicator layers store calculation parameters rather than generated point arrays, so the API and web renderer can reproduce them from the same candle snapshot.
 
+### `packages/renderer`
+
+The renderer is a provider-neutral, long-running Playwright service. It accepts structured `market`, `reference`, and `documentId` parameters, opens the configured Unimarket web deployment, waits for that exact draft to finish projecting, and returns `image/png` plus render metadata headers. The browser process stays warm across requests, so a model can inspect and revise many drafts without rebuilding the frontend or launching its own browser harness each turn.
+
 ### `packages/api`
 
 The `api` package wires everything together.
@@ -175,10 +181,12 @@ MarketAdapter.getPriceHistory
   -> schema and snapshot validation
   -> draft/published persistence
   -> Lightweight Charts + time-price SVG projection
-  -> Playwright screenshot and render metadata
+  -> persistent Playwright image endpoint + render metadata
 ```
 
-The renderer is tested at build time with deterministic fixtures. Individual model documents are data, not code, so they do not require rebuilding Playwright or the frontend. A model can open the deployed analysis URL or run `pnpm render:analysis` for visual inspection.
+The renderer is tested with deterministic fixtures and again against opt-in live MU data. Individual model documents are data, not code, so they do not require rebuilding Playwright or the frontend. A model should use the persistent image endpoint for iterative review; `pnpm render:analysis` is the local fallback.
+
+Mechanical checks prove that layers exist and the browser is healthy. They do not prove technical-analysis quality. Image inspection and critique are therefore explicit model reasoning steps before publication, while the stored format and renderer remain independent of the model provider.
 
 ## Market Capability Model
 

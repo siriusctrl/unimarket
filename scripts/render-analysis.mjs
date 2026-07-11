@@ -31,6 +31,10 @@ try {
     analysisReady: element.getAttribute("data-analysis-ready") === "true",
     annotationCount: Number(element.getAttribute("data-annotation-count") ?? 0),
     candleHash: element.getAttribute("data-candle-hash"),
+    viewportFrom: element.getAttribute("data-viewport-from"),
+    viewportTo: element.getAttribute("data-viewport-to"),
+    priceScale: element.getAttribute("data-price-scale"),
+    renderedProfileBins: element.querySelectorAll("[data-profile-bin]").length,
     renderedDrawingIds: Array.from(element.querySelectorAll("[data-drawing-id]"))
       .map((drawing) => drawing.getAttribute("data-drawing-id"))
       .filter(Boolean),

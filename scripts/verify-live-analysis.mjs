@@ -1,4 +1,3 @@
-import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -12,8 +11,10 @@ const outputDir = path.join(root, "artifacts", "analysis", stamp);
 const dbPath = path.join(outputDir, "mu-live.sqlite");
 const apiPort = 43180;
 const webPort = 43181;
+const rendererPort = 43182;
 const apiBase = `http://127.0.0.1:${apiPort}`;
 const webBase = `http://127.0.0.1:${webPort}`;
+const rendererBase = `http://127.0.0.1:${rendererPort}`;
 mkdirSync(outputDir, { recursive: true });
 
 const api = spawn("corepack", ["pnpm", "--filter", "@unimarket/api", "exec", "tsx", "src/index.ts"], {
@@ -23,13 +24,69 @@ const api = spawn("corepack", ["pnpm", "--filter", "@unimarket/api", "exec", "ts
   env: { ...process.env, DB_URL: `file:${dbPath}`, PORT: String(apiPort) },
 });
 let web;
-let browser;
+let renderer;
 
 const jsonRequest = async (url, init = {}) => {
   const response = await fetch(url, init);
   const payload = await response.json();
   if (!response.ok) throw new Error(`${response.status} ${url}: ${JSON.stringify(payload)}`);
   return payload;
+};
+
+const selectViewportStartIndex = (candles) => {
+  const earliest = Math.max(0, candles.length - 90);
+  const latest = Math.max(0, candles.length - 55);
+  let breakoutIndex = earliest;
+  let largestMove = 0;
+  for (let index = Math.max(1, earliest); index < candles.length; index += 1) {
+    const move = Math.abs((candles[index].close / candles[index - 1].close) - 1);
+    if (move > largestMove) {
+      largestMove = move;
+      breakoutIndex = index;
+    }
+  }
+  return Math.max(earliest, Math.min(latest, breakoutIndex - 8));
+};
+
+const selectRecentSupport = (candles, viewportStartIndex) => {
+  const pivots = candles.flatMap((candle, index) => {
+    if (index < viewportStartIndex + 2 || index >= candles.length - 2) return [];
+    const neighborhood = candles.slice(index - 2, index + 3);
+    return neighborhood.every((candidate) => candle.low <= candidate.low) ? [{ candle, index }] : [];
+  });
+  const latest = candles.at(-1);
+  const candidates = pivots.flatMap((first, firstIndex) => pivots.slice(firstIndex + 1).flatMap((second) => {
+    const span = second.index - first.index;
+    if (span < 8 || span > 45 || second.candle.low <= first.candle.low) return [];
+    const slope = (second.candle.low - first.candle.low) / span;
+    const projected = second.candle.low + slope * (candles.length - 1 - second.index);
+    if (projected > latest.low * 1.01 || projected < latest.close * 0.65) return [];
+    const violations = candles.slice(first.index).filter((candle, offset) => {
+      const support = first.candle.low + slope * offset;
+      return candle.low < support * 0.98;
+    }).length;
+    const distance = (latest.close - projected) / latest.close;
+    const age = candles.length - 1 - second.index;
+    const score = violations * 100 + distance * 20 + age * 0.04 + Math.abs(span - 22) * 0.03;
+    return [{ first, second, slope, projected, violations, score }];
+  }));
+  if (candidates.length > 0) return candidates.sort((left, right) => left.score - right.score)[0];
+
+  const focused = candles.slice(viewportStartIndex);
+  const midpoint = Math.floor(focused.length / 2);
+  const lowest = (rows, offset) => rows.reduce((best, candle, index) =>
+    candle.low < best.candle.low ? { candle, index: offset + index } : best,
+  { candle: rows[0], index: offset });
+  const first = lowest(focused.slice(0, midpoint), viewportStartIndex);
+  const second = lowest(focused.slice(midpoint), viewportStartIndex + midpoint);
+  const slope = (second.candle.low - first.candle.low) / (second.index - first.index);
+  const projected = second.candle.low + slope * (candles.length - 1 - second.index);
+  return { first, second, slope, projected, violations: 0, score: Number.POSITIVE_INFINITY };
+};
+
+const quantile = (values, percentile) => {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * percentile))];
 };
 
 try {
@@ -45,21 +102,17 @@ try {
   if (context.data.candles.length < 40) throw new Error(`MU live history returned only ${context.data.candles.length} candles`);
 
   const candles = context.data.candles;
-  const localLows = candles.filter((candle, index) => {
-    if (index < 3 || index >= candles.length - 3) return false;
-    return candles.slice(index - 3, index + 4).every((candidate) => candle.low <= candidate.low);
-  });
-  const risingPairs = localLows.flatMap((first, firstIndex) => localLows.slice(firstIndex + 1).flatMap((second) =>
-    second.low > first.low ? [{ first, second, span: Date.parse(second.timestamp) - Date.parse(first.timestamp) }] : [],
-  )).sort((left, right) => right.span - left.span);
-  const firstAnchor = risingPairs[0]?.first ?? candles[Math.floor(candles.length * 0.25)];
-  const secondAnchor = risingPairs[0]?.second ?? candles[Math.floor(candles.length * 0.72)];
-  const recent = candles.slice(-40);
-  const resistance = Math.max(...recent.map((candle) => candle.high));
-  const firstAnchorIndex = candles.indexOf(firstAnchor);
-  const secondAnchorIndex = candles.indexOf(secondAnchor);
-  const channelAnchor = candles.slice(firstAnchorIndex, Math.max(firstAnchorIndex + 1, secondAnchorIndex + 1))
-    .reduce((highest, candle) => candle.high > highest.high ? candle : highest, candles[0]);
+  const viewportStartIndex = selectViewportStartIndex(candles);
+  const viewportCandles = candles.slice(viewportStartIndex);
+  const support = selectRecentSupport(candles, viewportStartIndex);
+  const recent = candles.slice(-35);
+  const supplyHigh = Math.max(...recent.map((candle) => candle.high));
+  const supplyLow = quantile(recent.map((candle) => candle.high), 0.82);
+  const supplyStart = recent.find((candle) => candle.high >= supplyLow) ?? recent[0];
+  const invalidation = support.projected * 0.98;
+  if (support.slope <= 0 || support.projected > candles.at(-1).low * 1.01) {
+    throw new Error("MU live data did not produce a valid, unbroken rising support candidate in the focused window");
+  }
   const now = new Date().toISOString();
   const document = {
     schema: "unimarket.chart-analysis/v1",
@@ -72,45 +125,49 @@ try {
       asOf: context.data.range.asOf,
       snapshotHash: context.data.snapshotHash,
     },
-    viewport: { priceScale: "auto" },
-    thesis: "Live MU validation document connects confirmed daily swing points and preserves the latest supply boundary.",
-    invalidation: `A daily close below ${secondAnchor.low.toFixed(2)} and the projected support invalidates this generated validation structure.`,
+    viewport: {
+      from: viewportCandles[0].timestamp,
+      to: context.data.range.endTime,
+      priceScale: "auto",
+    },
+    thesis: "The focused post-breakout window shows a recent sequence of higher pivot lows below an overhead supply zone; the full one-year history remains available as context but does not define the active trend slope.",
+    invalidation: `A daily close below ${invalidation.toFixed(2)} invalidates the focused rising-support candidate.`,
     layers: [
       {
         id: "live-rising-support",
         type: "trendLine",
         anchors: [
-          { time: firstAnchor.timestamp, price: firstAnchor.low },
-          { time: secondAnchor.timestamp, price: secondAnchor.low },
+          { time: support.first.candle.timestamp, price: support.first.candle.low },
+          { time: support.second.candle.timestamp, price: support.second.candle.low },
         ],
         extend: { left: false, right: true },
-        label: "Live swing support",
-        rationale: "Generated from two confirmed local lows in the live one-year MU candle response.",
-        confidence: 0.72,
+        label: "Recent pivot support",
+        rationale: `Connects two higher local lows inside the focused ${viewportCandles.length}-session regime; projected support remains below the latest candle.`,
+        confidence: 0.74,
         style: { color: "support", width: 2, lineStyle: "solid", opacity: 0.92 },
       },
       {
-        id: "live-channel",
-        type: "channel",
-        base: [
-          { time: firstAnchor.timestamp, price: firstAnchor.low },
-          { time: secondAnchor.timestamp, price: secondAnchor.low },
+        id: "live-supply-zone",
+        type: "rectangle",
+        anchors: [
+          { time: supplyStart.timestamp, price: supplyLow },
+          { time: context.data.range.endTime, price: supplyHigh },
         ],
-        parallelAnchor: { time: channelAnchor.timestamp, price: channelAnchor.high },
-        fillOpacity: 0.06,
-        label: "Live price channel",
-        rationale: "Uses the support slope and the highest prior candle to construct a parallel envelope.",
-        confidence: 0.64,
-        style: { color: "accent", width: 1, lineStyle: "dashed", opacity: 0.75 },
+        fillOpacity: 0.08,
+        label: "Recent supply",
+        labelPlacement: { at: "middle", offsetX: -30, offsetY: -6 },
+        rationale: "Marks the upper distribution of highs from the latest thirty-five sessions instead of forcing a parallel channel through an explosive repricing.",
+        confidence: 0.7,
+        style: { color: "resistance", width: 1, lineStyle: "solid", opacity: 0.72 },
       },
       {
-        id: "live-resistance",
+        id: "live-invalidation",
         type: "horizontalLine",
-        price: resistance,
-        label: "40-session high",
-        rationale: "Marks the highest high across the latest forty live daily candles.",
-        confidence: 0.8,
-        style: { color: "resistance", width: 2, lineStyle: "dotted", opacity: 0.86 },
+        price: invalidation,
+        label: "Structure invalidation",
+        rationale: "Places invalidation just below the projected recent support rather than below an unrelated annual low.",
+        confidence: 0.76,
+        style: { color: "warning", width: 1, lineStyle: "dotted", opacity: 0.8 },
       },
       { id: "sma-20", type: "sma", period: 20 },
       { id: "ema-50", type: "ema", period: 50 },
@@ -118,7 +175,7 @@ try {
       {
         id: "volume-profile",
         type: "volumeProfile",
-        from: context.data.range.startTime,
+        from: viewportCandles[0].timestamp,
         to: context.data.range.endTime,
         bins: 48,
         valueAreaPercent: 70,
@@ -137,11 +194,6 @@ try {
     headers: authorization,
     body: JSON.stringify({ document, reasoning: "Generate a live MU document for browser verification" }),
   });
-  const published = await jsonRequest(`${apiBase}/api/analysis/documents/${created.id}/publish`, {
-    method: "POST",
-    headers: authorization,
-    body: JSON.stringify({ reasoning: "Publish after schema and live-data validation" }),
-  });
 
   web = spawn("corepack", ["pnpm", "--filter", "@unimarket/web", "exec", "vite", "--host", "127.0.0.1", "--port", String(webPort), "--strictPort"], {
     cwd: root,
@@ -150,20 +202,27 @@ try {
     env: { ...process.env, UNIMARKET_API_PROXY: apiBase },
   });
   await waitForServer(webBase);
-  browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" });
-  const browserErrors = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
+  renderer = spawn("corepack", ["pnpm", "--filter", "@unimarket/renderer", "start"], {
+    cwd: root,
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, PORT: String(rendererPort), UNIMARKET_WEB_BASE_URL: webBase },
   });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
-  await page.goto(`${webBase}/analysis/hyperliquid/xyz%3AMU`, { waitUntil: "networkidle" });
-  const chart = page.locator("[data-analysis-ready='true']");
-  await chart.waitFor({ state: "visible" });
-  await page.waitForTimeout(700);
-  const annotationCount = Number(await chart.getAttribute("data-annotation-count"));
-  const renderedDrawingIds = await chart.locator("[data-drawing-id]").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-drawing-id")));
-  const renderedProfileBins = await chart.locator("[data-profile-bin]").count();
+  await waitForServer(`${rendererBase}/health`);
+  const renderUrl = new URL("/render", rendererBase);
+  renderUrl.searchParams.set("market", "hyperliquid");
+  renderUrl.searchParams.set("reference", "xyz:MU");
+  renderUrl.searchParams.set("documentId", created.id);
+  renderUrl.searchParams.set("scope", "page");
+  const renderResponse = await fetch(renderUrl);
+  if (!renderResponse.ok) throw new Error(`Renderer failed: ${renderResponse.status} ${await renderResponse.text()}`);
+  const encodedMetadata = renderResponse.headers.get("x-unimarket-render-metadata");
+  if (!encodedMetadata) throw new Error("Renderer response did not include visual metadata");
+  const renderMetadata = JSON.parse(Buffer.from(encodedMetadata, "base64url").toString("utf8"));
+  const annotationCount = renderMetadata.annotationCount;
+  const renderedDrawingIds = renderMetadata.renderedDrawingIds;
+  const renderedProfileBins = renderMetadata.renderedProfileBins;
+  const browserErrors = renderMetadata.browserErrors;
   if (annotationCount !== 3 || renderedDrawingIds.length !== 3) {
     throw new Error(`Expected 3 live MU drawings, got annotationCount=${annotationCount}, rendered=${renderedDrawingIds.length}`);
   }
@@ -171,10 +230,12 @@ try {
   if (browserErrors.length > 0) throw new Error(`Live MU page emitted browser errors: ${browserErrors.join(" | ")}`);
 
   const screenshotPath = path.join(outputDir, "mu-live-analysis.png");
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForFunction(() => window.scrollY === 0);
-  await page.waitForTimeout(1_000);
-  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "allow" });
+  writeFileSync(screenshotPath, Buffer.from(await renderResponse.arrayBuffer()));
+  const published = await jsonRequest(`${apiBase}/api/analysis/documents/${created.id}/publish`, {
+    method: "POST",
+    headers: authorization,
+    body: JSON.stringify({ reasoning: "Publish only after the exact draft rendered successfully through the image service" }),
+  });
   writeFileSync(path.join(outputDir, "mu-live-analysis.json"), `${JSON.stringify(published, null, 2)}\n`);
   writeFileSync(path.join(outputDir, "verification.json"), `${JSON.stringify({
     market: "hyperliquid",
@@ -184,17 +245,25 @@ try {
     lastCandle: candles.at(-1).timestamp,
     snapshotHash: context.data.snapshotHash,
     analysisId: created.id,
+    renderedStatus: created.status,
+    finalStatus: published.status,
     annotationCount,
     renderedDrawingIds,
     renderedProfileBins,
+    viewportCandleCount: viewportCandles.length,
+    viewportFrom: viewportCandles[0].timestamp,
+    supportAnchors: [support.first.candle.timestamp, support.second.candle.timestamp],
+    projectedSupport: support.projected,
+    supportViolations: support.violations,
     browserErrors,
+    rendererUrl: renderUrl.toString(),
     screenshotPath,
   }, null, 2)}\n`);
   console.log(`MU live candles: ${candles.length}`);
   console.log(`MU live analysis screenshot: ${screenshotPath}`);
   console.log(`MU live verification: ${path.join(outputDir, "verification.json")}`);
 } finally {
-  if (browser) await browser.close();
+  if (renderer) stopProcessGroup(renderer);
   if (web) stopProcessGroup(web);
   stopProcessGroup(api);
   for (const suffix of ["-shm", "-wal"]) rmSync(`${dbPath}${suffix}`, { force: true });

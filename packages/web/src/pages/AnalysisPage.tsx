@@ -23,6 +23,13 @@ const formatPrice = (value: number | null) => value === null
   ? "—"
   : value.toLocaleString("en-US", { maximumFractionDigits: value >= 100 ? 2 : 4 });
 
+const formatViewportDate = (value: string) => new Date(value).toLocaleDateString("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 export const AnalysisPage = () => {
   const params = useParams();
   const [searchParams] = useSearchParams();
@@ -46,6 +53,14 @@ export const AnalysisPage = () => {
     setMarketInput(market);
     setReferenceInput(reference);
   }, [market, reference]);
+
+  useEffect(() => {
+    const documentInterval = selectedDocument?.document.data.interval;
+    if (documentId && documentInterval && documentInterval !== interval) {
+      setInterval(documentInterval);
+      setLookback(DEFAULT_RANGE[documentInterval]);
+    }
+  }, [documentId, interval, selectedDocument]);
 
   const drawingCount = useMemo(
     () => selectedDocument?.document.layers.filter((layer) => "rationale" in layer).length ?? 0,
@@ -150,8 +165,12 @@ export const AnalysisPage = () => {
             <section className="overflow-hidden rounded-lg border border-border/70 bg-card shadow-panel" aria-label="Candlestick analysis chart">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
                 <div>
-                  <h3 className="font-semibold">{interval} candles</h3>
-                  <p className="text-xs text-muted-foreground">OHLCV with deterministic overlays</p>
+                  <h3 className="font-semibold">{context.data.interval} candles</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedDocument?.document.viewport.from && selectedDocument.document.viewport.to
+                      ? `Focused view · ${formatViewportDate(selectedDocument.document.viewport.from)} – ${formatViewportDate(selectedDocument.document.viewport.to)}`
+                      : "Full loaded range · OHLCV with deterministic overlays"}
+                  </p>
                 </div>
                 <p className="font-mono text-[11px] text-muted-foreground">{context.data.snapshotHash.slice(0, 20)}…</p>
               </div>

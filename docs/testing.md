@@ -80,7 +80,9 @@ Run the opt-in network check when changing chart context, Hyperliquid history, a
 pnpm verify:analysis-live
 ```
 
-The script starts isolated API and Vite processes, fetches live `xyz:MU` daily candles from Hyperliquid, creates and publishes a model-neutral analysis document, opens the page in Chromium, asserts generated drawings plus volume-profile bins, and writes JSON/screenshot evidence under `artifacts/analysis/<timestamp>/`.
+The script starts isolated API, Vite, and persistent renderer processes, fetches live `xyz:MU` daily candles from Hyperliquid, creates and publishes a model-neutral analysis document, requests that exact document through the image endpoint, asserts generated drawings plus volume-profile bins, and writes JSON/screenshot evidence under `artifacts/analysis/<timestamp>/`.
+
+This remains a transport and rendering smoke test. Human or model image inspection is required to judge whether the selected viewport, pivots, lines, channels, and labels make technical sense.
 
 This is not a deterministic CI dependency. The normal browser suite uses a fixed MU fixture; the live command proves the external adapter boundary on demand.
 

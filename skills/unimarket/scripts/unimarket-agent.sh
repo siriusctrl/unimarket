@@ -3,6 +3,7 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:3100}"
 API_BASE="${BASE_URL%/}/api"
+RENDER_BASE_URL="${RENDER_BASE_URL:-http://localhost:3101}"
 OUTPUT_MODE="${UNIMARKET_OUTPUT:-pretty}"
 JQ_FILTER="${UNIMARKET_JQ_FILTER:-}"
 HTTP_RESPONSE_BODY=""
@@ -242,6 +243,7 @@ unimarket-agent.sh - endpoint helper for agents
 
 Environment:
   BASE_URL           default: http://localhost:3100
+  RENDER_BASE_URL    default: http://localhost:3101
   API_KEY            required for authenticated commands
   UNIMARKET_OUTPUT   pretty | compact | raw (default: pretty)
   UNIMARKET_JQ_FILTER optional jq filter applied to JSON responses
@@ -275,12 +277,14 @@ Core commands:
 Analysis document commands:
   analysis-schema
   analysis-context <market> <reference> [interval] [lookback] [as_of]
-  analysis-list [market] [reference] [status]
+  analysis-list [market] [reference] [status] [interval]
   analysis-validate <document_json_file>
   analysis-create <document_json_file> <reasoning> [supersedes_id]
   analysis-update <analysis_id> <document_json_file> <reasoning>
   analysis-publish <analysis_id> <reasoning>
   analysis-render-metadata <analysis_id>
+  analysis-image-url <market> <reference> <analysis_id> [scope]
+  analysis-render <market> <reference> <analysis_id> <output_png> [scope]
 
 Trading and audit commands:
   buy <market> <reference> <quantity> <reasoning> [limit_price] [idempotency_key]
@@ -541,10 +545,12 @@ ENV
     market="${1:-}"
     reference="${2:-}"
     status="${3:-}"
+    interval="${4:-}"
     query="limit=20"
     [[ -n "$market" ]] && query="${query}&market=$(encode "$market")"
     [[ -n "$reference" ]] && query="${query}&reference=$(encode "$reference")"
     [[ -n "$status" ]] && query="${query}&status=$(encode "$status")"
+    [[ -n "$interval" ]] && query="${query}&interval=$(encode "$interval")"
     json_get "/analysis/documents?${query}"
     ;;
   analysis-validate)
@@ -585,6 +591,24 @@ ENV
   analysis-render-metadata)
     analysis_id="${1:?analysis id required}"
     json_get "/analysis/documents/${analysis_id}/render-metadata"
+    ;;
+  analysis-image-url)
+    market="${1:?market required}"
+    reference="${2:?reference required}"
+    analysis_id="${3:?analysis id required}"
+    scope="${4:-chart}"
+    printf '%s/render?market=%s&reference=%s&documentId=%s&scope=%s\n' \
+      "${RENDER_BASE_URL%/}" "$(encode "$market")" "$(encode "$reference")" "$(encode "$analysis_id")" "$(encode "$scope")"
+    ;;
+  analysis-render)
+    market="${1:?market required}"
+    reference="${2:?reference required}"
+    analysis_id="${3:?analysis id required}"
+    output_png="${4:?output png required}"
+    scope="${5:-chart}"
+    render_url="${RENDER_BASE_URL%/}/render?market=$(encode "$market")&reference=$(encode "$reference")&documentId=$(encode "$analysis_id")&scope=$(encode "$scope")"
+    curl -fsS "$render_url" -o "$output_png"
+    printf '%s\n' "$output_png"
     ;;
   buy|sell)
     market="${1:?market required}"

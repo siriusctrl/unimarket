@@ -55,6 +55,15 @@ pnpm render:analysis 'http://host/analysis/hyperliquid/xyz%3AMU?documentId=ana_e
 
 This captures the actual chart container without rebuilding the application and writes adjacent render metadata containing the candle hash, annotation count, rendered drawing IDs, and browser errors.
 
+For repeated model review, keep the renderer running instead:
+
+```bash
+UNIMARKET_WEB_BASE_URL=https://app.example.com pnpm dev:renderer
+curl -o draft.png 'http://localhost:3101/render?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example'
+```
+
+The model must inspect `draft.png`, record a concrete visual critique, update the draft JSON, and request another image. The renderer stays provider-neutral and does not decide whether a line is analytically valid.
+
 Report the absolute verification directory in the final handoff.
 
 ## Boundary

@@ -13,6 +13,7 @@ export type ProjectedDrawing = {
   opacity: number;
   fillOpacity?: number;
   shape?: "circle" | "diamond" | "arrowUp" | "arrowDown";
+  labelPlacement: DrawingLayer["labelPlacement"];
 };
 
 type Projectors = {
@@ -40,6 +41,7 @@ export const projectDrawing = (
     width: layer.style.width,
     lineStyle: layer.style.lineStyle,
     opacity: layer.style.opacity,
+    labelPlacement: layer.labelPlacement,
   };
 
   if (layer.type === "horizontalLine") {
@@ -70,6 +72,19 @@ export const projectDrawing = (
   const points = layer.anchors.map((point) => projectPoint(point, projectors));
   if (points.some((point) => point === null)) return null;
   const projected = points as [ScreenPoint, ScreenPoint];
+  if (layer.type === "rectangle") {
+    const [first, second] = projected;
+    return {
+      ...common,
+      points: [
+        first,
+        { x: second.x, y: first.y },
+        second,
+        { x: first.x, y: second.y },
+      ],
+      fillOpacity: layer.fillOpacity,
+    };
+  }
   if (layer.type === "ray" || (layer.type === "trendLine" && layer.extend.right)) {
     const [first, second] = projected;
     const dx = second.x - first.x;
@@ -89,6 +104,5 @@ export const projectDrawing = (
   return {
     ...common,
     points: projected,
-    ...(layer.type === "rectangle" ? { fillOpacity: layer.fillOpacity } : {}),
   };
 };

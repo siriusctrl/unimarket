@@ -1056,6 +1056,12 @@ describe("api integration", () => {
       document: { metadata: { createdBy: { actorId: user.userId }, runId: "model-provider-opaque-run" } },
     });
 
+    const intervalMismatch = await app.request(
+      `/api/analysis/context?market=polymarket&reference=MU&interval=1w&lookback=1y&documentId=${created.id}`,
+    );
+    expect(intervalMismatch.status).toBe(409);
+    expect((await intervalMismatch.json()).error.code).toBe("INTERVAL_MISMATCH");
+
     const metadataResponse = await app.request(`/api/analysis/documents/${created.id}/render-metadata`);
     expect(metadataResponse.status).toBe(200);
     expect((await metadataResponse.json()).drawings[0]).toMatchObject({

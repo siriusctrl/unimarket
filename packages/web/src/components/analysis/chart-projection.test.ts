@@ -22,6 +22,7 @@ const document = chartAnalysisDocumentSchema.parse({
 });
 
 const style = { color: "support" as const, width: 2, lineStyle: "solid" as const, opacity: 0.9 };
+const labelPlacement = { at: "start" as const, offsetX: 8, offsetY: -8 };
 const projectors = {
   time: (value: string) => (Date.parse(value) - Date.parse(document.data.from)) / 86_400_000 * 100,
   price: (value: number) => 500 - value,
@@ -40,6 +41,7 @@ describe("chart drawing projection", () => {
       rationale: "Fixture",
       visible: true,
       style,
+      labelPlacement,
     }, document, projectors, { width: 900, height: 500 });
 
     expect(drawing?.points[1].x).toBe(900);
@@ -59,10 +61,34 @@ describe("chart drawing projection", () => {
       rationale: "Fixture",
       visible: true,
       style,
+      labelPlacement,
     }, document, projectors, { width: 900, height: 500 });
 
     expect(drawing?.points).toHaveLength(4);
     if (!drawing) throw new Error("Channel projection was not generated");
     expect(drawing.points[2].x - drawing.points[3].x).toBe(drawing.points[1].x - drawing.points[0].x);
+  });
+
+  it("expands rectangle diagonal anchors into four axis-aligned corners", () => {
+    const drawing = projectDrawing({
+      id: "supply",
+      type: "rectangle",
+      anchors: [
+        { time: "2026-01-02T00:00:00.000Z", price: 100 },
+        { time: "2026-01-04T00:00:00.000Z", price: 140 },
+      ],
+      fillOpacity: 0.08,
+      rationale: "Fixture",
+      visible: true,
+      style,
+      labelPlacement,
+    }, document, projectors, { width: 900, height: 500 });
+
+    expect(drawing?.points).toEqual([
+      { x: 100, y: 400 },
+      { x: 300, y: 400 },
+      { x: 300, y: 360 },
+      { x: 100, y: 360 },
+    ]);
   });
 });

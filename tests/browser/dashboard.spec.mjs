@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { mockDashboardApi } from "./fixtures/dashboard.mjs";
+import { analysisDocumentsFixture, mockDashboardApi } from "./fixtures/dashboard.mjs";
 
 const browserErrorsByPage = new WeakMap();
 const apiCallsByPage = new WeakMap();
@@ -86,6 +86,7 @@ test("model-authored MU analysis renders financial data and time-price drawings"
 
   const chart = page.locator("[data-analysis-ready='true']");
   await expect(chart).toHaveAttribute("data-annotation-count", "4");
+  await expect(chart).toHaveAttribute("data-viewport-from", analysisDocumentsFixture.documents[1].document.viewport.from);
   expect(await chart.locator("canvas").count()).toBeGreaterThanOrEqual(2);
   await expect(chart.locator("[data-drawing-id='primary-support']")).toBeVisible();
   await expect(chart.locator("[data-drawing-id='ascending-channel']")).toBeVisible();
@@ -101,8 +102,9 @@ test("model can preview an exact draft revision before publishing", async ({ pag
   await page.goto("/analysis/hyperliquid/xyz%3AMU?documentId=ana-mu-draft");
   await expect(page.getByText("Draft revision isolates the current supply boundary before publication.")).toBeVisible();
   const chart = page.locator("[data-analysis-ready='true']");
-  await expect(chart).toHaveAttribute("data-annotation-count", "1");
+  await expect(chart).toHaveAttribute("data-annotation-count", "2");
   await expect(chart.locator("[data-drawing-id='resistance-980']")).toBeVisible();
+  await expect(chart.locator("[data-drawing-id='draft-rejection'] path")).toBeVisible();
   await expect.poll(() => apiCallsByPage.get(page).some((call) => call.includes("documentId=ana-mu-draft"))).toBe(true);
   expect(browserErrorsByPage.get(page)).toEqual([]);
 });

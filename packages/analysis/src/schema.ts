@@ -37,6 +37,12 @@ const drawingStyleSchema = z.object({
   opacity: z.number().min(0.1).max(1).default(0.9),
 }).strict().default({});
 
+const labelPlacementSchema = z.object({
+  at: z.enum(["start", "middle", "end"]).default("start"),
+  offsetX: z.number().min(-120).max(120).default(8),
+  offsetY: z.number().min(-80).max(80).default(-8),
+}).strict().default({});
+
 const drawingMetadataShape = {
   id: identifierSchema,
   label: z.string().trim().min(1).max(160).optional(),
@@ -44,6 +50,7 @@ const drawingMetadataShape = {
   confidence: z.number().min(0).max(1).optional(),
   visible: z.boolean().default(true),
   style: drawingStyleSchema,
+  labelPlacement: labelPlacementSchema,
 };
 
 const distinctAnchors = <T extends { time: string; price: number }[]>(anchors: T): boolean =>
@@ -160,6 +167,19 @@ export const indicatorLayerSchema = z.union([
 
 export const chartLayerSchema = z.union([drawingLayerSchema, indicatorLayerSchema]);
 
+const chartViewportSchema = z.object({
+  from: isoDateTimeSchema.optional(),
+  to: isoDateTimeSchema.optional(),
+  priceScale: z.enum(["auto", "logarithmic"]).default("auto"),
+}).strict().superRefine((viewport, ctx) => {
+  if ((viewport.from === undefined) !== (viewport.to === undefined)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "viewport from and to must be provided together" });
+  }
+  if (viewport.from && viewport.to && Date.parse(viewport.from) >= Date.parse(viewport.to)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["to"], message: "viewport to must be later than from" });
+  }
+}).default({});
+
 export const chartAnalysisDocumentSchema = z.object({
   schema: z.literal(CHART_ANALYSIS_SCHEMA),
   title: z.string().trim().min(1).max(160),
@@ -182,11 +202,7 @@ export const chartAnalysisDocumentSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["asOf"], message: "asOf must equal the snapshot range end" });
     }
   }),
-  viewport: z.object({
-    from: isoDateTimeSchema.optional(),
-    to: isoDateTimeSchema.optional(),
-    priceScale: z.enum(["auto", "logarithmic"]).default("auto"),
-  }).strict().default({}),
+  viewport: chartViewportSchema,
   thesis: z.string().trim().min(1).max(4_000),
   invalidation: z.string().trim().min(1).max(2_000),
   layers: z.array(chartLayerSchema).max(100),
@@ -206,6 +222,12 @@ export const chartAnalysisDocumentSchema = z.object({
     }
     ids.add(layer.id);
   });
+  if (document.viewport.from && Date.parse(document.viewport.from) < Date.parse(document.data.from)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["viewport", "from"], message: "viewport must stay inside the candle snapshot" });
+  }
+  if (document.viewport.to && Date.parse(document.viewport.to) > Date.parse(document.data.to)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["viewport", "to"], message: "viewport must stay inside the candle snapshot" });
+  }
 });
 
 export const createAnalysisDocumentSchema = z.object({

@@ -13,6 +13,7 @@ durable architecture in `docs/architecture.md`.
   and Polymarket integration.
 - `packages/api/`: HTTP API, env, fees, timeline, symbol metadata, workers, and
   server entrypoint.
+- `packages/renderer/`: persistent Playwright image service for model chart-review loops.
 - `packages/web/`: read-only dashboard UI.
 - `docs/api-reference.md`: user/API contract.
 - `docs/admin-guide.md`: admin-only operations.
@@ -50,6 +51,7 @@ durable architecture in `docs/architecture.md`.
 - API route, worker, auth, fees, timeline, or persistence behavior: inspect
   `packages/api/`.
 - Dashboard UI: inspect `packages/web/`.
+- Deployed chart image or browser-review behavior: inspect `packages/renderer/`.
 - Public API contract: read `docs/api-reference.md`.
 - Admin behavior: read `docs/admin-guide.md`.
 - Trading agent workflow: read `docs/trading-agent.md`.
@@ -66,7 +68,8 @@ durable architecture in `docs/architecture.md`.
 - Run `corepack pnpm verify:preview` for production-build dashboard changes.
 - Run `corepack pnpm verify:proof` for user-facing visual changes, inspect the
   generated GIF/contact sheet, and report the absolute artifact path.
-- Run `corepack pnpm verify:analysis-live` when changing live chart context or financial-chart rendering and report the ignored MU artifact path.
+- Run `corepack pnpm verify:analysis-live` when changing live chart context,
+  financial-chart rendering, or the renderer service; inspect and report the ignored MU artifact path.
 - For API contract changes, add or update focused package tests and check
   `docs/api-reference.md`.
 - For admin-boundary changes, verify user/admin separation explicitly.

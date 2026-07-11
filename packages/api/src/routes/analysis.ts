@@ -34,6 +34,7 @@ const contextQuerySchema = z.object({
 const listQuerySchema = z.object({
   market: z.string().trim().min(1).optional(),
   reference: z.string().trim().min(1).optional(),
+  interval: priceHistoryIntervalSchema.optional(),
   status: z.enum(["draft", "published"]).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -73,8 +74,9 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
       required: ["schema", "title", "instrument", "data", "thesis", "invalidation", "layers", "metadata"],
       instrument: ["market", "reference", "displayName?"],
       data: ["interval", "from", "to", "asOf", "snapshotHash"],
+      viewport: ["from?", "to?", "priceScale=auto|logarithmic"],
       metadata: ["createdBy.kind", "createdBy.actorId", "runId?", "createdAt"],
-      drawingCommon: ["id", "type", "rationale", "label?", "confidence?", "visible?", "style?"],
+      drawingCommon: ["id", "type", "rationale", "label?", "labelPlacement?", "confidence?", "visible?", "style?"],
       indicatorCommon: ["id", "type", "visible?"],
     },
     drawingContracts,
@@ -100,6 +102,9 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
         const stored = parseStoredChartAnalysis(row);
         if (stored.document.instrument.market !== parsed.data.market || stored.document.instrument.reference !== parsed.data.reference) {
           return jsonError(c, 409, "INSTRUMENT_MISMATCH", "Analysis document does not match the requested instrument");
+        }
+        if (stored.document.data.interval !== parsed.data.interval) {
+          return jsonError(c, 409, "INTERVAL_MISMATCH", "Analysis document does not match the requested candle interval");
         }
         indicatorLayers = stored.document.layers.filter(
           (layer): layer is IndicatorLayer => !("rationale" in layer),
@@ -128,6 +133,7 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
       const documents = rows
         .filter((row) => !parsed.data.market || row.market === parsed.data.market)
         .filter((row) => !parsed.data.reference || row.reference === parsed.data.reference)
+        .filter((row) => !parsed.data.interval || row.interval === parsed.data.interval)
         .filter((row) => !parsed.data.status || row.status === parsed.data.status)
         .slice(0, parsed.data.limit)
         .map(parseStoredChartAnalysis);

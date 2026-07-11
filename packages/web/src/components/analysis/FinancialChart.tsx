@@ -5,6 +5,7 @@ import {
   ColorType,
   HistogramSeries,
   LineSeries,
+  PriceScaleMode,
   createChart,
   type IChartApi,
   type ISeriesApi,
@@ -33,6 +34,46 @@ const lineDash = (style: ProjectedDrawing["lineStyle"]): string | undefined => {
   return undefined;
 };
 
+const labelAnchor = (drawing: ProjectedDrawing) => {
+  if (drawing.labelPlacement.at === "middle") {
+    return drawing.points.reduce(
+      (center, point) => ({ x: center.x + point.x / drawing.points.length, y: center.y + point.y / drawing.points.length }),
+      { x: 0, y: 0 },
+    );
+  }
+  if (drawing.labelPlacement.at === "end") return drawing.points.at(-1)!;
+  return drawing.points[0];
+};
+
+const DrawingLabel = ({ drawing, color, text }: { drawing: ProjectedDrawing; color: string; text?: string }) => {
+  if (!text) return null;
+  const anchor = labelAnchor(drawing);
+  return (
+    <text
+      x={anchor.x + drawing.labelPlacement.offsetX}
+      y={anchor.y + drawing.labelPlacement.offsetY}
+      fill={color}
+      fontSize="11"
+    >
+      {text}
+    </text>
+  );
+};
+
+const MarkerGlyph = ({ drawing, color }: { drawing: ProjectedDrawing; color: string }) => {
+  const point = drawing.points[0];
+  if (drawing.shape === "diamond") {
+    return <polygon points={`${point.x},${point.y - 6} ${point.x + 6},${point.y} ${point.x},${point.y + 6} ${point.x - 6},${point.y}`} fill={color} />;
+  }
+  if (drawing.shape === "arrowUp") {
+    return <path d={`M ${point.x} ${point.y - 7} L ${point.x + 6} ${point.y + 2} H ${point.x + 2} V ${point.y + 7} H ${point.x - 2} V ${point.y + 2} H ${point.x - 6} Z`} fill={color} />;
+  }
+  if (drawing.shape === "arrowDown") {
+    return <path d={`M ${point.x} ${point.y + 7} L ${point.x + 6} ${point.y - 2} H ${point.x + 2} V ${point.y - 7} H ${point.x - 2} V ${point.y - 2} H ${point.x - 6} Z`} fill={color} />;
+  }
+  return <circle cx={point.x} cy={point.y} r="5" fill={color} />;
+};
+
 const DrawingOverlay = ({ drawings, profileBars }: { drawings: ProjectedDrawing[]; profileBars: ProfileBar[] }) => (
   <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-hidden" aria-label="Technical analysis drawings">
     <g aria-label="Approximate volume profile" data-volume-profile-bins={profileBars.length}>
@@ -55,25 +96,24 @@ const DrawingOverlay = ({ drawings, profileBars }: { drawings: ProjectedDrawing[
         const points = drawing.points.map((point) => `${point.x},${point.y}`).join(" ");
         return (
           <g key={drawing.id} data-drawing-id={drawing.id}>
-            <polygon points={points} fill={stroke} fillOpacity={drawing.fillOpacity} stroke="none" />
-            <polyline
+            <polygon
               points={points}
-              fill="none"
+              fill={stroke}
+              fillOpacity={drawing.fillOpacity}
               stroke={stroke}
               strokeWidth={drawing.width}
               strokeDasharray={lineDash(drawing.lineStyle)}
               opacity={drawing.opacity}
             />
-            {drawing.label ? <text x={drawing.points[0].x + 8} y={drawing.points[0].y - 8} fill={stroke} fontSize="11">{drawing.label}</text> : null}
+            <DrawingLabel drawing={drawing} color={stroke} text={drawing.label} />
           </g>
         );
       }
       if (drawing.type === "marker" || drawing.type === "text") {
-        const point = drawing.points[0];
         return (
           <g key={drawing.id} data-drawing-id={drawing.id}>
-            {drawing.type === "marker" ? <circle cx={point.x} cy={point.y} r="5" fill={stroke} /> : null}
-            <text x={point.x + 8} y={point.y - 8} fill={stroke} fontSize="11">{drawing.text ?? drawing.label}</text>
+            {drawing.type === "marker" ? <MarkerGlyph drawing={drawing} color={stroke} /> : null}
+            <DrawingLabel drawing={drawing} color={stroke} text={drawing.text ?? drawing.label} />
           </g>
         );
       }
@@ -90,7 +130,7 @@ const DrawingOverlay = ({ drawings, profileBars }: { drawings: ProjectedDrawing[
             strokeDasharray={lineDash(drawing.lineStyle)}
             opacity={drawing.opacity}
           />
-          {drawing.label ? <text x={first.x + 8} y={first.y - 8} fill={stroke} fontSize="11">{drawing.label}</text> : null}
+          <DrawingLabel drawing={drawing} color={stroke} text={drawing.label} />
         </g>
       );
     })}
@@ -138,7 +178,10 @@ export const FinancialChart = ({
         vertLines: { color: dark ? "#25282d" : "#eceae4" },
         horzLines: { color: dark ? "#25282d" : "#eceae4" },
       },
-      rightPriceScale: { borderColor: dark ? "#34383e" : "#d8d5cc" },
+      rightPriceScale: {
+        borderColor: dark ? "#34383e" : "#d8d5cc",
+        mode: document?.viewport.priceScale === "logarithmic" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+      },
       timeScale: { borderColor: dark ? "#34383e" : "#d8d5cc", timeVisible: context.data.interval !== "1d" },
       crosshair: {
         vertLine: { color: dark ? "#717780" : "#8b8e92", labelBackgroundColor: "#315e48" },
@@ -196,11 +239,8 @@ export const FinancialChart = ({
     });
 
     const project = () => {
-      if (!document || !candleSeriesRef.current || !containerRef.current) {
-        setDrawings([]);
-        return;
-      }
-      const next = drawingLayers.flatMap((layer) => {
+      if (!candleSeriesRef.current || !containerRef.current) return;
+      const next = document ? drawingLayers.flatMap((layer) => {
         const projected = projectDrawing(
           layer,
           document,
@@ -211,7 +251,7 @@ export const FinancialChart = ({
           { width: container.clientWidth, height: container.clientHeight },
         );
         return projected ? [projected] : [];
-      });
+      }) : [];
       setDrawings(next);
 
       const profile = context.indicators.find((indicator) => indicator.type === "volumeProfile")?.profile;
@@ -237,7 +277,14 @@ export const FinancialChart = ({
       }));
     };
 
-    chart.timeScale().fitContent();
+    if (document?.viewport.from && document.viewport.to) {
+      chart.timeScale().setVisibleRange({
+        from: timestamp(document.viewport.from),
+        to: timestamp(document.viewport.to),
+      });
+    } else {
+      chart.timeScale().fitContent();
+    }
     chart.timeScale().subscribeVisibleTimeRangeChange(project);
     const resizeObserver = new ResizeObserver(() => {
       chart.resize(container.clientWidth, container.clientHeight);
@@ -261,6 +308,9 @@ export const FinancialChart = ({
       data-analysis-ready="true"
       data-candle-hash={context.data.snapshotHash}
       data-annotation-count={drawingLayers.length}
+      data-viewport-from={document?.viewport.from ?? context.data.range.startTime}
+      data-viewport-to={document?.viewport.to ?? context.data.range.endTime}
+      data-price-scale={document?.viewport.priceScale ?? "auto"}
     >
       <DrawingOverlay drawings={drawings} profileBars={profileBars} />
     </div>
