@@ -5,6 +5,8 @@
 ```bash
 pnpm test
 pnpm coverage
+pnpm verify:ui
+pnpm verify:preview
 ```
 
 Package-focused validation is often faster while iterating:
@@ -23,6 +25,57 @@ The repository follows a few testing layers.
 - Market adapters: mocked upstream responses and normalization behavior
 - API contract tests: status codes, payloads, auth boundaries, and persistence side effects
 - Integration workers: reconciliation, settlement, funding, and liquidation flows
+- Browser smoke: deterministic dashboard rendering, navigation, filters, theme, and responsive shell
+
+## Dashboard Browser Verification
+
+The dashboard browser layer is intentionally separate from API E2E. Playwright
+intercepts only `/api/dashboard/*` requests and returns the shared fixture in
+`tests/browser/fixtures/dashboard.mjs`. This keeps UI proof deterministic and
+prevents live Polymarket/Hyperliquid availability or local database contents
+from changing the rendered result.
+
+Install Chromium once:
+
+```bash
+pnpm setup:browsers
+```
+
+Run the interaction suite against a Vite dev server:
+
+```bash
+pnpm verify:ui
+```
+
+The suite covers:
+
+- overview and equity chart rendering;
+- equity/return mode and range controls;
+- roster search;
+- agent-detail navigation and position rendering;
+- audit timeline filtering;
+- light/dark theme switching;
+- mobile navigation and page-level overflow;
+- uncaught browser and console errors.
+
+Run the production bundle smoke separately:
+
+```bash
+pnpm verify:preview
+```
+
+This builds `@unimarket/web`, serves the Vite preview, and proves that the main
+dashboard-to-agent-detail path still works from production assets.
+
+For a user-facing visual change, also run:
+
+```bash
+pnpm verify:proof
+```
+
+See [Visual Verification](visual-verification.md) for artifact inspection and
+handoff requirements. API contract changes must update both focused API tests
+and the browser fixture when the dashboard response shape changes.
 
 High-severity regressions include:
 - balance/accounting drift

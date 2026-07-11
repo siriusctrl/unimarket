@@ -12,3 +12,6 @@ coverage
 .worktrees/
 .agent/
 .agents/
+artifacts/verification/
+playwright-report/
+test-results/

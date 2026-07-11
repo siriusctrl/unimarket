@@ -194,9 +194,18 @@ SERVE_WEB_DIST=true pnpm dev:api
 ### Running Tests
 
 ```bash
-pnpm test       # Run all tests
-pnpm coverage   # Coverage with CI-enforced thresholds
+pnpm test              # Run all package tests
+pnpm coverage          # Coverage with CI-enforced thresholds
+pnpm setup:browsers    # One-time Chromium install for browser verification
+pnpm verify:ui         # Deterministic Playwright dashboard smoke tests
+pnpm verify:preview    # Production-build browser smoke test
+pnpm verify:proof      # Record the final dashboard evidence bundle
 ```
+
+Browser verification uses deterministic dashboard responses, so it does not
+need exchange credentials, a seeded database, or live market connectivity.
+`verify:proof` additionally requires `ffmpeg` and writes review artifacts under
+`artifacts/verification/<timestamp>/`.
 
 ---
 
@@ -211,6 +220,7 @@ pnpm coverage   # Coverage with CI-enforced thresholds
 | [Admin Guide](docs/admin-guide.md) | Dashboard review workflows, admin APIs, timelines, and liquidation monitoring |
 | [Trading Agent](docs/trading-agent.md) | How to build an autonomous trading agent against the current API and event model |
 | [Testing](docs/testing.md) | Test strategy, smoke playbook, worker regression checklist, and SSE validation |
+| [Visual Verification](docs/visual-verification.md) | Playwright browser proof workflow and generated evidence artifacts |
 
 ---
 

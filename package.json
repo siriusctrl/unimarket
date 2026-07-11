@@ -7,11 +7,16 @@
     "dev": "corepack pnpm --parallel --filter @unimarket/api --filter @unimarket/web dev",
     "dev:api": "corepack pnpm --filter @unimarket/api dev",
     "dev:web": "corepack pnpm --filter @unimarket/web dev",
+    "setup:browsers": "playwright install chromium",
+    "verify:ui": "playwright test",
+    "verify:preview": "node scripts/verify-preview.mjs",
+    "verify:proof": "node scripts/record-proof.mjs",
     "coverage": "corepack pnpm --filter @unimarket/core test:coverage && corepack pnpm --filter @unimarket/markets test:coverage && corepack pnpm --filter @unimarket/api test:coverage",
     "test": "corepack pnpm -r test",
     "typecheck": "corepack pnpm -r typecheck"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^22.13.9",
     "@vitest/coverage-v8": "^3.2.4",
     "tsx": "^4.20.5",

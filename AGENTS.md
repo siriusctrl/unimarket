@@ -17,6 +17,7 @@ durable architecture in `docs/architecture.md`.
 - `docs/admin-guide.md`: admin-only operations.
 - `docs/architecture.md`: package boundaries and system design.
 - `docs/testing.md`: verification workflow.
+- `docs/visual-verification.md`: browser proof artifacts and review workflow.
 - `docs/trading-agent.md`: agent-facing trading workflow.
 - `docs/trading-model.md`: market/trading domain model.
 - `docs/codex-exec.md`: delegation prompt patterns.
@@ -59,6 +60,10 @@ durable architecture in `docs/architecture.md`.
 - Run `corepack pnpm test` for broad repo verification.
 - Run `corepack pnpm coverage` when touching core trading, markets, or API
   behavior where coverage matters.
+- Run `corepack pnpm verify:ui` for dashboard interaction or rendering changes.
+- Run `corepack pnpm verify:preview` for production-build dashboard changes.
+- Run `corepack pnpm verify:proof` for user-facing visual changes, inspect the
+  generated GIF/contact sheet, and report the absolute artifact path.
 - For API contract changes, add or update focused package tests and check
   `docs/api-reference.md`.
 - For admin-boundary changes, verify user/admin separation explicitly.
