@@ -137,7 +137,7 @@ const loadModule = async (options: {
   vi.doMock("../src/workers/periodic-worker.js", () => ({ startPeriodicWorker }));
 
   const mod = await import("../src/workers/liquidator.js");
-  const registry = { get: vi.fn(() => ({ capabilities: ["funding", "quote"], getQuote })) };
+  const registry = { get: vi.fn(() => ({ getFundingRate: vi.fn(), getQuote })) };
   return { ...mod, registry, inserted, updated, deleted, eventEmit, emitOrderCancelled, cancelPendingOrderInTx, startPeriodicWorker, getQuote, logError, logInfo };
 };
 
@@ -163,7 +163,7 @@ describe("liquidateUnsafePerpPositions", () => {
     });
 
     mod.registry.get = vi.fn((market: string) => {
-      if (market === "perp") return { capabilities: ["funding", "quote"], getQuote: mod.getQuote };
+      if (market === "perp") return { getFundingRate: vi.fn(), getQuote: mod.getQuote };
       return undefined;
     });
     mod.getQuote.mockImplementation(async (symbol: string) => {
@@ -269,7 +269,7 @@ describe("liquidateUnsafePerpPositions", () => {
     vi.doMock("../src/workers/periodic-worker.js", () => ({ startPeriodicWorker: vi.fn((_config) => () => undefined) }));
 
     const mod = await import("../src/workers/liquidator.js");
-    const registry = { get: vi.fn(() => ({ capabilities: ["funding", "quote"], getQuote: vi.fn(async () => ({ price: 40, bid: 39, ask: 41 })) })) };
+    const registry = { get: vi.fn(() => ({ getFundingRate: vi.fn(), getQuote: vi.fn(async () => ({ price: 40, bid: 39, ask: 41 })) })) };
 
     await expect(mod.liquidateUnsafePerpPositions(registry as never)).resolves.toEqual({ checked: 1, liquidated: 0, skipped: 1 });
     expect(logError).toHaveBeenCalled();

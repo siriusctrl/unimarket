@@ -134,13 +134,12 @@ describe("portfolio-read", () => {
       get: vi.fn((market: string) => {
         if (market === "polymarket") {
           return {
-            capabilities: ["quote"],
             getQuote: vi.fn().mockResolvedValue({ price: 12, timestamp: "2026-03-07T02:00:00.000Z" }),
           };
         }
         if (market === "hyperliquid") {
           return {
-            capabilities: ["funding", "quote"],
+            getFundingRate: vi.fn(),
             getQuote: vi.fn().mockResolvedValue({ price: 90, timestamp: "2026-03-07T02:00:00.000Z" }),
           };
         }
@@ -214,7 +213,6 @@ describe("portfolio-read", () => {
       get: vi.fn((market: string) => {
         if (market === "quoted") {
           return {
-            capabilities: ["quote"],
             getQuote: vi.fn().mockRejectedValue(new Error("quote unavailable")),
           };
         }
@@ -361,8 +359,8 @@ describe("portfolio-read", () => {
 
     const registry = {
       get: vi.fn((market: string) => {
-        if (market === "spot") return { capabilities: ["quote"], getQuote: vi.fn().mockResolvedValue({ price: 14 }) };
-        if (market === "perp") return { capabilities: ["funding", "quote"], getQuote: vi.fn().mockResolvedValue({ price: 80 }) };
+        if (market === "spot") return { getQuote: vi.fn().mockResolvedValue({ price: 14 }) };
+        if (market === "perp") return { getFundingRate: vi.fn(), getQuote: vi.fn().mockResolvedValue({ price: 80 }) };
         return undefined;
       }),
     };

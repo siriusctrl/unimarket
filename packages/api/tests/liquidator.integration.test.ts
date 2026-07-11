@@ -26,7 +26,6 @@ const buildFundingAdapter = (quotePrice: number): MarketAdapter => ({
   description: "mock funding market",
   referenceFormat: "ticker",
   priceRange: null,
-  capabilities: ["quote", "funding", "search"],
   search: async () => [],
   getQuote: async (symbol) => ({
     reference: symbol,

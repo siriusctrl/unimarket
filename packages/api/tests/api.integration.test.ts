@@ -51,7 +51,6 @@ const polymarketAdapter: MarketAdapter = {
   description: "mock polymarket adapter",
   referenceFormat: "mock",
   priceRange: [0.01, 0.99],
-  capabilities: ["search", "browse", "quote", "orderbook", "resolve"],
   browseOptions: [{ value: "volume", label: "Volume" }],
   searchSortOptions: [{ value: "volume", label: "Volume" }],
   search: async (query) => {
@@ -68,6 +67,12 @@ const polymarketAdapter: MarketAdapter = {
     { reference: "0x-pending", name: "Pending Contract", metadata: { category: "test" } },
   ],
   normalizeReference: async (reference) => (reference === "alias-fill" ? "0x-market-fill" : reference),
+  getTradingConstraints: async () => ({
+    minQuantity: 1,
+    quantityStep: 1,
+    supportsFractional: false,
+    maxLeverage: null,
+  }),
   getQuote: async (reference) => {
     const quote = quoteBySymbol[reference] ?? { price: 0.6, bid: 0.59, ask: 0.6 };
     return { reference, ...quote, timestamp: new Date().toISOString() };
@@ -106,14 +111,20 @@ const quoteOnlyAdapter: MarketAdapter = {
   description: "adapter to validate capability guard rails",
   referenceFormat: "mock",
   priceRange: [0.01, 1],
-  capabilities: ["quote"],
   search: async () => [],
+  normalizeReference: async (reference) => reference,
   getQuote: async (reference) => ({
     reference,
     price: 0.4,
     bid: 0.39,
     ask: 0.4,
     timestamp: new Date().toISOString(),
+  }),
+  getTradingConstraints: async () => ({
+    minQuantity: 1,
+    quantityStep: 1,
+    supportsFractional: false,
+    maxLeverage: null,
   }),
 };
 
@@ -123,7 +134,6 @@ const fundingAdapter: MarketAdapter = {
   description: "adapter to validate funding capability routes",
   referenceFormat: "ticker",
   priceRange: null,
-  capabilities: ["search", "quote", "funding"],
   search: async () => [{ reference: "BTC", name: "BTC-PERP" }],
   normalizeReference: async (reference) => reference.trim().replace(/[-_\s]*perp$/i, "").toUpperCase(),
   getQuote: async (reference) => ({
@@ -725,9 +735,9 @@ describe("api integration", () => {
     expect(missingMarket.status).toBe(404);
     expect((await missingMarket.json()).error.code).toBe("MARKET_NOT_FOUND");
 
-    const unsupportedSearch = await authedJson("/api/markets/quote-only/search?q=abc", user.apiKey);
-    expect(unsupportedSearch.status).toBe(400);
-    expect((await unsupportedSearch.json()).error.code).toBe("CAPABILITY_NOT_SUPPORTED");
+    const emptySearch = await authedJson("/api/markets/quote-only/search?q=abc", user.apiKey);
+    expect(emptySearch.status).toBe(200);
+    expect(await emptySearch.json()).toEqual({ results: [], hasMore: false });
 
     const unsupportedOrderbook = await authedJson("/api/markets/quote-only/orderbook?reference=abc", user.apiKey);
     expect(unsupportedOrderbook.status).toBe(400);
@@ -1756,8 +1766,13 @@ describe("api integration", () => {
     ).toBe(true);
   });
 
-  it("returns explicit partial portfolio valuation for missing adapters and still tolerates malformed journal tags", async () => {
-    const user = await registerUser("portfolio-fallback-user");
+  it("returns explicit partial portfolio valuation for missing adapters", async () => {
+    const user = await registerUser("portfolio-partial-user");
+
+  });
+
+  it("reports corrupt journal tags as an internal data error", async () => {
+    const user = await registerUser("corrupt-journal-user");
 
     await db
       .insert(tables.positions)
@@ -1811,9 +1826,9 @@ describe("api integration", () => {
       .run();
 
     const journalResponse = await authedJson("/api/journal", user.apiKey);
-    expect(journalResponse.status).toBe(200);
+    expect(journalResponse.status).toBe(500);
     const journalPayload = await journalResponse.json();
-    expect(journalPayload.entries[0]?.tags).toEqual([]);
+    expect(journalPayload.error.code).toBe("INTERNAL_ERROR");
   });
 
   it("reconciles pending limit orders globally across accounts", async () => {

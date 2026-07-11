@@ -27,17 +27,17 @@ const noopQuote = async (symbol: string) => ({ symbol, price: 0.5, bid: 0.49, as
 
 const buildAdapter = (options: {
   marketId: string;
-  capabilities: ReadonlyArray<"search" | "quote" | "orderbook" | "resolve">;
   resolve?: (symbol: string) => Promise<{ symbol: string; resolved: boolean; outcome: string | null; settlementPrice: number | null; timestamp: string } | null>;
 }): MarketAdapter => ({
   marketId: options.marketId,
   displayName: options.marketId,
   description: `${options.marketId} adapter`,
-  symbolFormat: "mock",
+  referenceFormat: "mock",
   priceRange: [0, 1],
-  capabilities: options.capabilities,
   search: noopSearch,
+  normalizeReference: async (reference) => reference,
   getQuote: noopQuote,
+  getTradingConstraints: async () => ({ minQuantity: 1, quantityStep: 1, supportsFractional: false, maxLeverage: null }),
   resolve: options.resolve,
 });
 
@@ -153,7 +153,6 @@ describe("settler integration", () => {
     registry.register(
       buildAdapter({
         marketId: "resolve-ok",
-        capabilities: ["quote", "resolve"],
         resolve: async (symbol) => ({
           symbol,
           resolved: true,
@@ -218,11 +217,10 @@ describe("settler integration", () => {
     await insertPosition({ id: "pnoaccount", accountId: "missing-account", market: "resolve-ok", symbol: "M6", quantity: 1 });
 
     const registry = new MarketRegistry();
-    registry.register(buildAdapter({ marketId: "no-resolve", capabilities: ["quote"] }));
+    registry.register(buildAdapter({ marketId: "no-resolve" }));
     registry.register(
       buildAdapter({
         marketId: "resolve-throws",
-        capabilities: ["resolve"],
         resolve: async () => {
           throw new Error("boom");
         },
@@ -231,7 +229,6 @@ describe("settler integration", () => {
     registry.register(
       buildAdapter({
         marketId: "resolve-unresolved",
-        capabilities: ["resolve"],
         resolve: async (symbol) => ({
           symbol,
           resolved: false,
@@ -244,7 +241,6 @@ describe("settler integration", () => {
     registry.register(
       buildAdapter({
         marketId: "resolve-null",
-        capabilities: ["resolve"],
         resolve: async (symbol) => ({
           symbol,
           resolved: true,
@@ -257,7 +253,6 @@ describe("settler integration", () => {
     registry.register(
       buildAdapter({
         marketId: "resolve-ok",
-        capabilities: ["resolve"],
         resolve: async (symbol) => ({
           symbol,
           resolved: true,
@@ -286,7 +281,6 @@ describe("settler integration", () => {
     registry.register(
       buildAdapter({
         marketId: "resolve-ok",
-        capabilities: ["resolve"],
         resolve: async (symbol) => ({
           symbol,
           resolved: true,

@@ -28,7 +28,7 @@ export const applyFundingPayments = async (
             continue;
         }
 
-        if (!adapter.capabilities.includes("funding") || typeof adapter.getFundingRate !== "function") {
+        if (!adapter.getFundingRate) {
             skipped += 1;
             continue;
         }

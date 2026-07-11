@@ -23,7 +23,7 @@ export const settlePendingPositions = async (registry: MarketRegistry): Promise<
       continue;
     }
 
-    if (!adapter.capabilities.includes("resolve") || typeof adapter.resolve !== "function") {
+    if (!adapter.resolve) {
       skipped += 1;
       continue;
     }

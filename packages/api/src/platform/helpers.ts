@@ -136,11 +136,11 @@ export const requireUserRecord = async (
 
 export const serializeTags = (tags: string[] | undefined): string => JSON.stringify(tags ?? []);
 
-export const deserializeTags = (raw: string): string[] => {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
+export const parseStoredStringArray = (raw: string, fieldName: string): string[] => {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+    throw new TypeError(`Invalid ${fieldName}: expected a JSON array of strings`);
   }
+
+  return parsed;
 };

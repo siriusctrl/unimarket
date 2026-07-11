@@ -91,7 +91,6 @@ const buildFundingAdapter = (options: {
   description: `${options.marketId} adapter`,
   referenceFormat: "mock",
   priceRange: null,
-  capabilities: ["quote", "funding"],
   search: async () => [],
   getQuote: options.getQuote ?? (async (symbol) => ({ reference: symbol, price: 100, bid: 99, ask: 101, timestamp: new Date().toISOString() })),
   getFundingRate: options.getFundingRate,

@@ -1,4 +1,4 @@
-import type { MarketRegistry, Quote } from "@unimarket/markets";
+import { getExecutionPrice, type MarketRegistry, type Quote } from "@unimarket/markets";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { db } from "../db/client.js";
@@ -133,7 +133,7 @@ export const reconcilePendingOrders = async (
       continue;
     }
 
-    const quotePrice = pendingOrder.side === "buy" ? (quote.ask ?? quote.price) : (quote.bid ?? quote.price);
+    const quotePrice = getExecutionPrice(quote, pendingOrder.side as "buy" | "sell");
 
     const shouldFill =
       pendingOrder.side === "buy" ? quotePrice <= pendingOrder.limitPrice : quotePrice >= pendingOrder.limitPrice;

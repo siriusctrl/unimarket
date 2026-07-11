@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HyperliquidAdapter } from "../src/hyperliquid.js";
-import { MarketAdapterError } from "../src/types.js";
+import { getMarketCapabilities, MarketAdapterError } from "../src/types.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => {
   return new Response(JSON.stringify(body), {
@@ -100,7 +100,7 @@ describe("HyperliquidAdapter", () => {
     expect(adapter.marketId).toBe("hyperliquid");
     expect(adapter.displayName).toBe("Hyperliquid");
     expect(adapter.referenceFormat).toContain("Ticker");
-    expect(adapter.capabilities).toEqual(expect.arrayContaining(["search", "browse", "quote", "orderbook", "funding"]));
+    expect(getMarketCapabilities(adapter)).toEqual(expect.arrayContaining(["search", "browse", "quote", "orderbook", "funding"]));
     expect(adapter.priceHistory).toMatchObject({
       defaultInterval: "1h",
       supportsCustomRange: true,
@@ -208,7 +208,7 @@ describe("HyperliquidAdapter", () => {
     expect(byPrice.map((row) => row.reference)).toEqual(["xyz:NVDA", "flx:NVDA"]);
   });
 
-  it("keeps query discovery available when one builder dex meta request fails", async () => {
+  it("fails query discovery when any advertised builder dex is unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse((init as RequestInit).body as string);
       if (body.type === "perpDexs") {
@@ -223,12 +223,9 @@ describe("HyperliquidAdapter", () => {
       throw new Error(`Unexpected request type: ${JSON.stringify(body)}`);
     });
 
-    const adapter = makeAdapter();
-    const results = await adapter.search("openai");
-
-    expect(results).toMatchObject([
-      { reference: "vntl:OPENAI", name: "vntl:OPENAI-PERP" },
-    ]);
+    await expect(makeAdapter().search("openai")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
   });
 
   it("browses all listed references with pagination", async () => {
@@ -410,7 +407,7 @@ describe("HyperliquidAdapter", () => {
     expect(fundingCalls).toHaveLength(1);
   });
 
-  it("sorts alphabetically for query searches and tolerates optional context failures", async () => {
+  it("rejects query searches when required discovery context fails", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse((init as RequestInit).body as string);
       if (body.type === "perpDexs") return jsonResponse(PERP_DEXS_RESPONSE);
@@ -419,14 +416,12 @@ describe("HyperliquidAdapter", () => {
       throw new Error(`Unexpected request type: ${body.type}`);
     });
 
-    const adapter = makeAdapter();
-    const results = await adapter.search("o", { limit: 10, offset: 0 });
-
-    expect(results.map((row) => row.reference)).toEqual(["DOGE", "SOL"]);
-    expect(results.every((row) => row.price === undefined)).toBe(true);
+    await expect(makeAdapter().search("o", { limit: 10, offset: 0 })).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
   });
 
-  it("falls back to asset contexts for builder-perp funding", async () => {
+  it("reads builder-perp funding from asset contexts", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-10T04:12:34.000Z"));
 
@@ -548,23 +543,7 @@ describe("HyperliquidAdapter", () => {
     });
   });
 
-  it("supports legacy funding payloads and validates malformed funding data", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      const body = JSON.parse((init as RequestInit).body as string);
-      if (body.type === "meta") return jsonResponse(META_RESPONSE);
-      if (body.type === "predictedFundings") {
-        return jsonResponse([["HlPerp", { coin: "ETH", fundingRate: "0.0002", nextFundingTime: "1700000000" }]]);
-      }
-      throw new Error(`Unexpected request type: ${body.type}`);
-    });
-
-    const legacyAdapter = makeAdapter();
-    const legacyFunding = await legacyAdapter.getFundingRate("ETH");
-    expect(legacyFunding.rate).toBe(0.0002);
-    expect(legacyFunding.nextFundingAt).toBe(new Date(1_700_000_000_000).toISOString());
-    expect(legacyFunding.direction).toBe("long_pays_short");
-
-    vi.restoreAllMocks();
+  it("validates malformed funding data", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse((init as RequestInit).body as string);
       if (body.type === "meta") return jsonResponse(META_RESPONSE);
@@ -592,6 +571,21 @@ describe("HyperliquidAdapter", () => {
     const invalidTimeAdapter = makeAdapter();
     await expect(invalidTimeAdapter.getFundingRate("BTC")).rejects.toMatchObject<Partial<MarketAdapterError>>({
       code: "UPSTREAM_ERROR",
+    });
+  });
+
+  it("rejects unsupported funding payload shapes", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      const body = JSON.parse((init as RequestInit).body as string);
+      if (body.type === "meta") return jsonResponse(META_RESPONSE);
+      if (body.type === "predictedFundings") {
+        return jsonResponse([["HlPerp", { coin: "ETH", fundingRate: "0.0002", nextFundingTime: "1700000000" }]]);
+      }
+      throw new Error(`Unexpected request type: ${body.type}`);
+    });
+
+    await expect(makeAdapter().getFundingRate("ETH")).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "SYMBOL_NOT_FOUND",
     });
   });
 
@@ -632,7 +626,7 @@ describe("HyperliquidAdapter", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("does not cache browse results when metaAndAssetCtxs fails transiently", async () => {
+  it("does not cache a failed browse context request", async () => {
     let ctxCallCount = 0;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse((init as RequestInit).body as string);
@@ -647,11 +641,10 @@ describe("HyperliquidAdapter", () => {
 
     const adapter = makeAdapter();
 
-    // First call: contexts fail, results have no prices and should not be cached
-    const degraded = await adapter.browse?.({ limit: 4, offset: 0 });
-    expect(degraded?.every((r) => r.price === undefined)).toBe(true);
+    await expect(adapter.browse?.({ limit: 4, offset: 0 })).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
 
-    // Second call: contexts succeed, should re-fetch (not serve from cache)
     const recovered = await adapter.browse?.({ limit: 4, offset: 0 });
     expect(recovered?.find((r) => r.reference === "BTC")?.price).toBe(95000.5);
     expect(ctxCallCount).toBe(2);
@@ -717,24 +710,18 @@ describe("HyperliquidAdapter", () => {
     });
   });
 
-  it("falls back to allMids for price when metaAndAssetCtxs fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+  it("rejects browse when required asset contexts are unavailable", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const body = JSON.parse((init as RequestInit).body as string);
       if (body.type === "meta") return jsonResponse(META_RESPONSE);
       if (body.type === "metaAndAssetCtxs") throw new Error("context unavailable");
-      if (body.type === "allMids") return jsonResponse({ BTC: "94500", ETH: "3100", SOL: "170", DOGE: "0.22" });
       throw new Error(`Unexpected request type: ${body.type}`);
     });
 
-    const adapter = makeAdapter();
-    const results = await adapter.browse?.({ sort: "price", limit: 4 });
-
-    // Price descending from allMids fallback
-    expect(results?.map((r) => r.reference)).toEqual(["BTC", "ETH", "SOL", "DOGE"]);
-    expect(results?.[0]?.price).toBe(94500);
-    // Volume/OI not available without contexts
-    expect(results?.[0]?.volume).toBeUndefined();
-    expect(results?.[0]?.openInterest).toBeUndefined();
+    await expect(makeAdapter().browse?.({ sort: "price", limit: 4 })).rejects.toMatchObject<Partial<MarketAdapterError>>({
+      code: "UPSTREAM_ERROR",
+    });
+    expect(fetchSpy.mock.calls.some(([, init]) => JSON.parse((init as RequestInit).body as string).type === "allMids")).toBe(false);
   });
 
   it("gets price history from candleSnapshot and caches results", async () => {

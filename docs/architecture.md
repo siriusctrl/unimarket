@@ -157,7 +157,7 @@ It is intentionally thin:
 
 ## Market Capability Model
 
-The most important architectural choice is capability-driven branching.
+The most important architectural choice is method-driven capability branching.
 
 Examples:
 - markets with `funding` are treated as perp markets
@@ -166,6 +166,8 @@ Examples:
 - markets with `search` and `browse` can drive discovery workflows for agents and operator review tools
 
 This avoids hardcoding business logic around a market name such as `if market === "hyperliquid"`.
+
+Every adapter implements search, quote retrieval, reference normalization, and trading constraints. Optional methods such as `browse`, `getFundingRate`, and `resolve` define the remaining capabilities. The registry derives the public capability descriptor from those methods; adapters do not maintain a second capability list that can drift from their implementation.
 
 The adapter contract currently centers around methods like:
 - `search(query)`
@@ -187,7 +189,7 @@ A typical order request follows this path.
 4. The service loads the adapter from the registry.
 5. The service normalizes the external reference and validates trading constraints.
 6. The service fetches a quote.
-7. The service chooses spot or perp engine based on capabilities.
+7. The service chooses the spot or perp engine from the adapter's implemented methods.
 8. The service performs transactional writes to accounts, orders, trades, and positions.
 9. The service emits SSE events and returns the new state.
 
@@ -284,7 +286,7 @@ Current timeline event types:
 
 The account timeline and admin timeline both use the same builder so operators and end users see consistent event semantics.
 
-The timeline record contract is shared through `@unimarket/core`, so the API and web dashboard do not maintain separate event-shape definitions.
+The timeline record contract is a discriminated union shared through `@unimarket/core`. Each event type has its own required payload, so the API and dashboard do not maintain separate shapes or defensively probe fields that cannot be absent.
 
 ### SSE
 
@@ -317,7 +319,7 @@ This is not a full exchange risk engine. It is a pragmatic paper-trading model t
 If you add a new market, the preferred path is:
 
 1. implement a new adapter in `packages/markets`
-2. expose capabilities honestly
+2. implement the required adapter methods and only the optional methods the market supports
 3. add adapter tests with mocked upstream responses
 4. register it in the API bootstrap path
 5. document any special symbol semantics or constraints

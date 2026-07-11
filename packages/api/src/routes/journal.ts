@@ -7,7 +7,7 @@ import { db } from "../db/client.js";
 import { journal } from "../db/schema.js";
 import { jsonError } from "../platform/errors.js";
 import {
-  deserializeTags,
+  parseStoredStringArray,
   parseJson,
   parseQuery,
   requireNonAdminUserId,
@@ -18,6 +18,7 @@ import { beginIdempotentRequest, storeIdempotentJsonResponse } from "../platform
 import { makeId, nowIso } from "../utils.js";
 
 const router = new Hono<{ Variables: AppVariables }>();
+const parseTags = (raw: string): string[] => parseStoredStringArray(raw, "journal tags");
 
 router.post(
   "/",
@@ -44,7 +45,7 @@ router.post(
     };
 
     await db.insert(journal).values(entry).run();
-    const payload = { ...entry, tags: deserializeTags(entry.tags) };
+    const payload = { ...entry, tags: parseTags(entry.tags) };
     const response = c.json(payload, 201);
     await storeIdempotentJsonResponse(idempotency.candidate, response);
     return response;
@@ -73,17 +74,17 @@ router.get(
       rows = rows.filter(
         (row) =>
           row.content.toLowerCase().includes(lowered) ||
-          deserializeTags(row.tags).some((tag) => tag.toLowerCase().includes(lowered)),
+          parseTags(row.tags).some((tag) => tag.toLowerCase().includes(lowered)),
       );
     }
 
     if (tagSet) {
-      rows = rows.filter((row) => deserializeTags(row.tags).some((tag) => tagSet.has(tag)));
+      rows = rows.filter((row) => parseTags(row.tags).some((tag) => tagSet.has(tag)));
     }
 
     const paginated = rows.slice(parsed.data.offset, parsed.data.offset + parsed.data.limit);
     return c.json({
-      entries: paginated.map((entry) => ({ ...entry, tags: deserializeTags(entry.tags) })),
+      entries: paginated.map((entry) => ({ ...entry, tags: parseTags(entry.tags) })),
     });
   }),
 );

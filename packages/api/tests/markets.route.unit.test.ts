@@ -15,9 +15,8 @@ afterEach(() => {
 });
 
 describe("createMarketRoutes", () => {
-  it("lists markets and returns adapter-specific or default trading constraints", async () => {
+  it("lists markets and returns each adapter's explicit trading constraints", async () => {
     const typedAdapter = {
-      capabilities: ["search"],
       getTradingConstraints: vi.fn().mockResolvedValue({
         minQuantity: 0.01,
         quantityStep: 0.01,
@@ -25,7 +24,14 @@ describe("createMarketRoutes", () => {
         maxLeverage: 5,
       }),
     };
-    const plainAdapter = { capabilities: ["search"] };
+    const plainAdapter = {
+      getTradingConstraints: vi.fn().mockResolvedValue({
+        minQuantity: 1,
+        quantityStep: 1,
+        supportsFractional: false,
+        maxLeverage: null,
+      }),
+    };
     const registry = {
       list: () => [{ id: "typed", name: "Typed" }, { id: "plain", name: "Plain" }],
       get: (marketId: string) => (marketId === "typed" ? typedAdapter : marketId === "plain" ? plainAdapter : undefined),
@@ -50,9 +56,8 @@ describe("createMarketRoutes", () => {
   });
 
   it("returns missing-market and capability errors consistently", async () => {
-    const browseOnly = { capabilities: ["browse"], browse: vi.fn().mockResolvedValue([]) };
+    const browseOnly = { browse: vi.fn().mockResolvedValue([]) };
     const quoteOnly = {
-      capabilities: ["quote"],
       getQuote: vi.fn().mockResolvedValue({ reference: "BTC", price: 1, bid: 0.99, ask: 1.01, timestamp: "2026-03-08T00:00:00.000Z" }),
     };
     const registry = {
@@ -97,7 +102,6 @@ describe("createMarketRoutes", () => {
 
   it("keeps quote responses lean and does not trigger implicit funding lookups", async () => {
     const adapter = {
-      capabilities: ["quote", "funding"],
       getQuote: vi.fn(async (reference: string) => ({
         reference,
         price: reference === "btc" ? 100 : 50,
@@ -153,7 +157,6 @@ describe("createMarketRoutes", () => {
 
   it("maps batch quote, orderbook, and funding errors per reference", async () => {
     const adapter = {
-      capabilities: ["quote", "orderbook", "funding"],
       getQuote: vi.fn(async (reference: string) => {
         if (reference === "btc") return { reference, price: 100 };
         if (reference === "eth") throw new MarketAdapterError("SYMBOL_NOT_FOUND", "missing eth");
@@ -221,7 +224,6 @@ describe("createMarketRoutes", () => {
 
   it("returns unresolved defaults and validates malformed query payloads", async () => {
     const adapter = {
-      capabilities: ["resolve", "search"],
       resolve: vi.fn().mockResolvedValue(null),
       search: vi.fn().mockResolvedValue([]),
     };
@@ -243,7 +245,6 @@ describe("createMarketRoutes", () => {
 
   it("passes optional search sort through to the adapter", async () => {
     const adapter = {
-      capabilities: ["search"],
       searchSortOptions: [{ value: "volume", label: "Volume" }],
       search: vi.fn().mockResolvedValue([{ reference: "xyz:NVDA", name: "xyz:NVDA-PERP" }]),
     };
@@ -265,7 +266,6 @@ describe("createMarketRoutes", () => {
 
   it("returns discovery hasMore and rejects unsupported sort keys", async () => {
     const adapter = {
-      capabilities: ["search", "browse"],
       searchSortOptions: [{ value: "volume", label: "Volume" }],
       browseOptions: [{ value: "price", label: "Price" }],
       search: vi.fn().mockResolvedValue([
@@ -354,7 +354,6 @@ describe("createMarketRoutes", () => {
       },
     };
     const withHistory = {
-      capabilities: ["quote", "priceHistory"],
       getQuote: vi.fn().mockResolvedValue({ price: 100 }),
       priceHistory: {
         nativeIntervals: ["1h"],
@@ -369,7 +368,6 @@ describe("createMarketRoutes", () => {
       getPriceHistory: vi.fn().mockResolvedValue(historyPayload),
     };
     const withoutHistory = {
-      capabilities: ["quote"],
       getQuote: vi.fn().mockResolvedValue({ price: 50 }),
     };
     const registry = {

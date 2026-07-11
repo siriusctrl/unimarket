@@ -4,17 +4,8 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "./db/client.js";
 import { fundingPayments, journal, liquidations, orders } from "./db/schema.js";
-import { deserializeTags } from "./platform/helpers.js";
+import { parseStoredStringArray } from "./platform/helpers.js";
 import { formatResolvedSymbolLabel, resolveSymbolsByMarketWithCache } from "./symbol-metadata.js";
-
-const deserializeStringArray = (raw: string): string[] => {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-};
 
 export const buildTimelineEvents = async ({
   registry,
@@ -84,8 +75,7 @@ export const buildTimelineEvents = async ({
       data: {
         id: row.id,
         content: row.content,
-        tags: deserializeTags(row.tags),
-        symbolName: null,
+        tags: parseStoredStringArray(row.tags, "journal tags"),
       },
       reasoning: null,
       createdAt: row.createdAt,
@@ -121,7 +111,10 @@ export const buildTimelineEvents = async ({
         feeCharged: row.feeCharged,
         netPayout: row.netPayout,
         liquidatedAt: row.createdAt,
-        cancelledReduceOnlyOrderIds: deserializeStringArray(row.cancelledReduceOnlyOrderIds),
+        cancelledReduceOnlyOrderIds: parseStoredStringArray(
+          row.cancelledReduceOnlyOrderIds,
+          "liquidation cancelled order IDs",
+        ),
         symbolName: null,
       },
       reasoning: row.reasoning,
@@ -133,9 +126,7 @@ export const buildTimelineEvents = async ({
 
   const symbolsByMarket = new Map<string, Set<string>>();
   for (const event of merged) {
-    if (!event.data.market || !event.data.symbol) {
-      continue;
-    }
+    if (event.type === "journal") continue;
 
     const symbols = symbolsByMarket.get(event.data.market);
     if (symbols) {
@@ -147,7 +138,7 @@ export const buildTimelineEvents = async ({
 
   const symbolResolutionByMarket = await resolveSymbolsByMarketWithCache(registry, symbolsByMarket);
   for (const event of merged) {
-    if (!event.data.market || !event.data.symbol) continue;
+    if (event.type === "journal") continue;
     event.data.symbolName = formatResolvedSymbolLabel(
       symbolResolutionByMarket.get(event.data.market),
       event.data.symbol,

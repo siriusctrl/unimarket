@@ -191,11 +191,7 @@ Example:
 }
 ```
 
-Fallback behavior when a market does not implement custom constraints:
-- `minQuantity = 1`
-- `quantityStep = 1`
-- `supportsFractional = false`
-- `maxLeverage = null`
+Every registered adapter defines these constraints. The API does not invent defaults for an incomplete adapter implementation; a missing or invalid adapter contract is an internal server error.
 
 ### Quote response
 

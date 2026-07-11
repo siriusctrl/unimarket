@@ -156,7 +156,7 @@ export type TradingConstraints = {
   minQuantity: number;
   quantityStep: number;
   supportsFractional: boolean;
-  maxLeverage?: number | null;
+  maxLeverage: number | null;
 };
 
 export type SymbolResolution = {
@@ -170,22 +170,31 @@ export interface MarketAdapter {
   readonly description: string;
   readonly referenceFormat: string;
   readonly priceRange: [number, number] | null;
-  readonly capabilities: readonly MarketCapability[];
   readonly browseOptions?: readonly BrowseOption[];
   readonly searchSortOptions?: readonly BrowseOption[];
   readonly priceHistory?: PriceHistorySupport | null;
 
   search(query: string, options?: SearchOptions): Promise<MarketReference[]>;
   browse?(options?: BrowseOptions): Promise<MarketReference[]>;
-  normalizeReference?(reference: string): Promise<string>;
+  normalizeReference(reference: string): Promise<string>;
   getQuote(reference: string): Promise<Quote>;
   getOrderbook?(reference: string): Promise<Orderbook>;
   resolve?(reference: string): Promise<Resolution | null>;
   resolveSymbolNames?(symbols: Iterable<string>): Promise<SymbolResolution>;
   getFundingRate?(reference: string): Promise<FundingRate>;
-  getTradingConstraints?(reference: string): Promise<TradingConstraints>;
+  getTradingConstraints(reference: string): Promise<TradingConstraints>;
   getPriceHistory?(reference: string, options?: PriceHistoryOptions): Promise<PriceHistoryResult>;
 }
+
+export const getMarketCapabilities = (adapter: MarketAdapter): MarketCapability[] => {
+  const capabilities: MarketCapability[] = ["search", "quote"];
+  if (adapter.browse) capabilities.push("browse");
+  if (adapter.getOrderbook) capabilities.push("orderbook");
+  if (adapter.resolve) capabilities.push("resolve");
+  if (adapter.getFundingRate) capabilities.push("funding");
+  if (adapter.getPriceHistory) capabilities.push("priceHistory");
+  return capabilities;
+};
 
 export class MarketAdapterError extends Error {
   readonly code: string;

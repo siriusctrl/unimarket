@@ -91,7 +91,7 @@ export const liquidateUnsafePerpPositions = async (
 
   for (const row of rows) {
     const adapter = registry.get(row.market);
-    if (!adapter || !adapter.capabilities.includes("funding")) {
+    if (!adapter?.getFundingRate) {
       skipped += 1;
       continue;
     }

@@ -118,31 +118,27 @@ describe("applyFundingPayments", () => {
       get: vi.fn((market: string) => {
         if (market === "missing") return undefined;
         if (market === "no-funding") {
-          return { capabilities: ["quote"], getQuote: vi.fn() };
+          return { getQuote: vi.fn() };
         }
         if (market === "rate-error") {
           return {
-            capabilities: ["funding", "quote"],
             getFundingRate: vi.fn().mockRejectedValue(new Error("rate down")),
             getQuote: vi.fn().mockResolvedValue({ price: 100 }),
           };
         }
         if (market === "zero-rate") {
           return {
-            capabilities: ["funding", "quote"],
             getFundingRate: vi.fn().mockResolvedValue({ rate: 0, nextFundingAt: "2026-03-07T01:00:00.000Z", direction: "neutral" }),
             getQuote: vi.fn().mockResolvedValue({ price: 100 }),
           };
         }
         if (market === "quote-error") {
           return {
-            capabilities: ["funding", "quote"],
             getFundingRate: vi.fn().mockResolvedValue({ rate: 0.01, nextFundingAt: "2026-03-07T01:00:00.000Z", direction: "long_pays_short" }),
             getQuote: vi.fn().mockRejectedValue(new Error("quote down")),
           };
         }
         return {
-          capabilities: ["funding", "quote"],
           getFundingRate: vi.fn().mockResolvedValue({ rate: 0.0000001, nextFundingAt: "2026-03-07T01:00:00.000Z", direction: "long_pays_short" }),
           getQuote: vi.fn().mockResolvedValue({ price: 1 }),
         };
@@ -163,7 +159,6 @@ describe("applyFundingPayments", () => {
 
     const registry = {
       get: vi.fn(() => ({
-        capabilities: ["funding", "quote"],
         getFundingRate: vi.fn().mockResolvedValue({ rate: 0.01, nextFundingAt: "2026-03-07T03:00:00.000Z", direction: "long_pays_short" }),
         getQuote: vi.fn().mockResolvedValue({ price: 100 }),
       })),
@@ -198,7 +193,6 @@ describe("applyFundingPayments", () => {
     });
     const registry = {
       get: vi.fn(() => ({
-        capabilities: ["funding", "quote"],
         getFundingRate: vi.fn().mockResolvedValue({ rate: 0.01, nextFundingAt: "2026-03-07T03:00:00.000Z", direction: "long_pays_short" }),
         getQuote: vi.fn().mockResolvedValue({ price: 100 }),
       })),
@@ -230,7 +224,6 @@ describe("applyFundingPayments", () => {
 
     const registry = {
       get: vi.fn(() => ({
-        capabilities: ["funding", "quote"],
         getFundingRate: vi.fn().mockResolvedValue({ rate: 0.01, nextFundingAt: "2026-03-07T03:00:00.000Z", direction: "long_pays_short" }),
         getQuote: vi.fn().mockResolvedValue({ price: 100 }),
       })),

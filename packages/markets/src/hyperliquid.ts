@@ -148,22 +148,14 @@ type AssetContext = {
 };
 
 type PredictedFundingEntry = {
-    coin?: string;
     fundingRate: string | number;
     nextFundingTime: number | string;
-};
-
-type CurrentFundingParseResult = {
-    matchedCoin: boolean;
-    entry: PredictedFundingEntry | null;
 };
 
 type DiscoveryMetric = "price" | "volume" | "openInterest";
 
 type HyperliquidDiscoveryContext = {
     ctxMap: Map<string, AssetContext>;
-    midPrices: Record<string, string>;
-    ctxAvailable: boolean;
 };
 
 type HyperliquidDiscoveryEntry = {
@@ -189,40 +181,25 @@ const asFundingEntry = (value: unknown): PredictedFundingEntry | null => {
     return value as PredictedFundingEntry;
 };
 
-const parseCurrentShapeFundingEntry = (data: unknown[], normalizedSymbol: string): CurrentFundingParseResult => {
+const parseFundingEntry = (data: unknown[], normalizedSymbol: string): PredictedFundingEntry | null => {
     for (const item of data) {
         if (!Array.isArray(item) || item.length < 2) continue;
         const coin = item[0];
         const venues = item[1];
         if (typeof coin !== "string" || coin !== normalizedSymbol || !Array.isArray(venues)) continue;
 
-        let fallback: PredictedFundingEntry | null = null;
         for (const venueItem of venues) {
             if (!Array.isArray(venueItem) || venueItem.length < 2) continue;
             const venue = venueItem[0];
             const info = asFundingEntry(venueItem[1]);
             if (!info) continue;
-            if (fallback === null) fallback = info;
             if (isHyperliquidVenue(venue)) {
-                return { matchedCoin: true, entry: info };
+                return info;
             }
         }
-        return { matchedCoin: true, entry: fallback };
+        return null;
     }
 
-    return { matchedCoin: false, entry: null };
-};
-
-const parseLegacyShapeFundingEntry = (data: unknown[], normalizedSymbol: string): PredictedFundingEntry | null => {
-    for (const item of data) {
-        if (!Array.isArray(item) || item.length < 2) continue;
-        const venue = item[0];
-        const info = asFundingEntry(item[1]);
-        if (!info) continue;
-        if (info.coin !== normalizedSymbol) continue;
-        if (!isHyperliquidVenue(venue)) continue;
-        return info;
-    }
     return null;
 };
 
@@ -232,7 +209,6 @@ export class HyperliquidAdapter implements MarketAdapter {
     readonly description = "Perpetual futures across Hyperliquid dexes with hourly funding";
     readonly referenceFormat = "Ticker or dex-prefixed ticker (e.g. BTC, xyz:NVDA, vntl:OPENAI)";
     readonly priceRange: [number, number] | null = null;
-    readonly capabilities = ["search", "browse", "quote", "orderbook", "funding", "priceHistory"] as const;
     readonly browseOptions = HYPERLIQUID_BROWSE_OPTIONS;
     readonly searchSortOptions = HYPERLIQUID_BROWSE_OPTIONS;
     readonly priceHistory = HYPERLIQUID_PRICE_HISTORY;
@@ -391,21 +367,7 @@ export class HyperliquidAdapter implements MarketAdapter {
 
     private async getAllMeta(): Promise<MetaUniverse[]> {
         const dexs = await this.getPerpDexes();
-        const responses = await Promise.allSettled(dexs.map((dex) => this.getMetaForDex(dex)));
-        const universes: MetaUniverse[] = [];
-        let fulfilled = 0;
-
-        for (const response of responses) {
-            if (response.status !== "fulfilled") continue;
-            fulfilled += 1;
-            universes.push(...response.value);
-        }
-
-        if (fulfilled === 0) {
-            throw new MarketAdapterError("UPSTREAM_ERROR", "Invalid meta response from Hyperliquid");
-        }
-
-        return universes;
+        return (await Promise.all(dexs.map((dex) => this.getMetaForDex(dex)))).flat();
     }
 
     private async getL2Book(symbol: string): Promise<L2BookResponse> {
@@ -474,50 +436,21 @@ export class HyperliquidAdapter implements MarketAdapter {
 
     private async getAllAssetContexts(): Promise<Map<string, AssetContext>> {
         const dexs = await this.getPerpDexes();
-        const responses = await Promise.allSettled(dexs.map((dex) => this.getAssetContextsForDex(dex)));
+        const responses = await Promise.all(dexs.map((dex) => this.getAssetContextsForDex(dex)));
         const map = new Map<string, AssetContext>();
-        let fulfilled = 0;
 
         for (const response of responses) {
-            if (response.status !== "fulfilled") continue;
-            fulfilled += 1;
-            const [meta, ctxs] = response.value;
+            const [meta, ctxs] = response;
             for (let i = 0; i < meta.universe.length && i < ctxs.length; i++) {
                 map.set(meta.universe[i].name, ctxs[i]);
             }
-        }
-
-        if (fulfilled === 0) {
-            throw new MarketAdapterError("UPSTREAM_ERROR", "Invalid metaAndAssetCtxs response from Hyperliquid");
         }
 
         return map;
     }
 
     private async loadDiscoveryContext(includeAllDexes: boolean): Promise<HyperliquidDiscoveryContext> {
-        let ctxMap = new Map<string, AssetContext>();
-        let ctxAvailable = false;
-        try {
-            ctxMap = includeAllDexes ? await this.getAllAssetContexts() : await this.getAssetContexts();
-            ctxAvailable = true;
-        } catch {
-            // asset contexts are optional enrichment; proceed without them
-        }
-
-        let midPrices: Record<string, string> = {};
-        if (!ctxAvailable) {
-            try {
-                midPrices = includeAllDexes ? await this.getAllDexMids() : await this.getAllMids();
-            } catch {
-                // price fallback is also optional
-            }
-        }
-
-        return {
-            ctxMap,
-            midPrices,
-            ctxAvailable,
-        };
+        return { ctxMap: includeAllDexes ? await this.getAllAssetContexts() : await this.getAssetContexts() };
     }
 
     private getDiscoveryCtxNumber(context: HyperliquidDiscoveryContext, coin: string, field: keyof AssetContext): number | null {
@@ -527,10 +460,7 @@ export class HyperliquidAdapter implements MarketAdapter {
 
     private getDiscoveryPrice(context: HyperliquidDiscoveryContext, coin: string): number | null {
         const ctx = context.ctxMap.get(coin);
-        if (ctx) {
-            return parseNumber(ctx.midPx) ?? parseNumber(ctx.markPx) ?? null;
-        }
-        return parseNumber(context.midPrices[coin]) ?? null;
+        return ctx ? parseNumber(ctx.midPx) ?? parseNumber(ctx.markPx) : null;
     }
 
     private getDiscoveryMetric(context: HyperliquidDiscoveryContext, asset: MetaUniverse, metric: DiscoveryMetric): number | null {
@@ -628,17 +558,13 @@ export class HyperliquidAdapter implements MarketAdapter {
             fundingPreview,
             metadata: {
                 szDecimals: asset.szDecimals,
-                maxLeverage: asset.maxLeverage,
                 ...this.buildTradingConstraints(asset),
                 ...(funding !== undefined ? { funding } : {}),
             },
         };
     }
 
-    private async listReferences({ query, sort }: { query?: string; sort?: string }): Promise<{
-        results: MarketReference[];
-        ctxAvailable: boolean;
-    }> {
+    private async listReferences({ query, sort }: { query?: string; sort?: string }): Promise<MarketReference[]> {
         const lowerQuery = query?.toLowerCase().trim() ?? "";
         const includeAllDexes = lowerQuery.length > 0;
         const universe = includeAllDexes ? await this.getAllMeta() : await this.getMeta();
@@ -655,10 +581,7 @@ export class HyperliquidAdapter implements MarketAdapter {
             this.sortBrowseEntries(sorted, sort, context);
         }
 
-        return {
-            results: sorted.map((entry) => this.toDiscoveryReference(context, entry.asset)),
-            ctxAvailable: context.ctxAvailable,
-        };
+        return sorted.map((entry) => this.toDiscoveryReference(context, entry.asset));
     }
 
     private async buildReferences(
@@ -679,24 +602,14 @@ export class HyperliquidAdapter implements MarketAdapter {
 
         if (isBrowse) {
             const cacheKey = `browse-result:${normalizedSort}`;
-            // Browse cache is only valid when asset contexts are available. Without
-            // contexts we may still fall back to allMids for price, but volume and
-            // open interest enrichment are unavailable, so degraded snapshots must
-            // not be reused across later browse requests.
-            let cacheable = true;
             const fullResults = await this.cache.remember(cacheKey, {
                 ttlMs: this.browseCacheTtlMs,
-                load: async () => {
-                    const { results, ctxAvailable } = await this.listReferences({ sort: normalizedSort });
-                    cacheable = ctxAvailable;
-                    return results;
-                },
-                shouldCache: () => cacheable,
+                load: () => this.listReferences({ sort: normalizedSort }),
             });
             return fullResults.slice(offset, offset + limit);
         }
 
-        const { results } = await this.listReferences({ query, sort: normalizedSort });
+        const results = await this.listReferences({ query, sort: normalizedSort });
         return results.slice(offset, offset + limit);
     }
 
@@ -715,39 +628,6 @@ export class HyperliquidAdapter implements MarketAdapter {
             limit: options?.limit,
             offset: options?.offset,
         });
-    }
-
-    private async getAllMids(): Promise<Record<string, string>> {
-        return this.cache.remember(`allMids:${this.getDexCacheKey(null)}`, {
-            ttlMs: QUOTE_TTL_MS,
-            load: () => postInfo<Record<string, string>>(this.apiUrl, { type: "allMids" }, this.requestTimeoutMs),
-        });
-    }
-
-    private async getAllMidsForDex(dex: string | null): Promise<Record<string, string>> {
-        return this.cache.remember(`allMids:${this.getDexCacheKey(dex)}`, {
-            ttlMs: QUOTE_TTL_MS,
-            load: () => postInfo<Record<string, string>>(this.apiUrl, this.buildDexRequest("allMids", dex), this.requestTimeoutMs),
-        });
-    }
-
-    private async getAllDexMids(): Promise<Record<string, string>> {
-        const dexs = await this.getPerpDexes();
-        const responses = await Promise.allSettled(dexs.map((dex) => this.getAllMidsForDex(dex)));
-        const mids: Record<string, string> = {};
-        let fulfilled = 0;
-
-        for (const response of responses) {
-            if (response.status !== "fulfilled") continue;
-            fulfilled += 1;
-            Object.assign(mids, response.value);
-        }
-
-        if (fulfilled === 0) {
-            throw new MarketAdapterError("UPSTREAM_ERROR", "Invalid allMids response from Hyperliquid");
-        }
-
-        return mids;
     }
 
     private async getPredictedFundings(): Promise<unknown[]> {
@@ -868,15 +748,10 @@ export class HyperliquidAdapter implements MarketAdapter {
 
         const data = await this.getPredictedFundings();
 
-        const currentShape = parseCurrentShapeFundingEntry(data, normalizedSymbol);
-        const entry =
-            currentShape.entry ??
-            (currentShape.matchedCoin ? null : parseLegacyShapeFundingEntry(data, normalizedSymbol));
+        const entry = parseFundingEntry(data, normalizedSymbol);
 
         if (!entry) {
-            const fundingRate = await this.getFundingRateFromAssetContext(reference, normalizedSymbol);
-            this.cache.set(cacheKey, fundingRate, FUNDING_TTL_MS);
-            return fundingRate;
+            throw new MarketAdapterError("SYMBOL_NOT_FOUND", `Funding data not found for ${normalizedSymbol}`);
         }
 
         const rate = parseNumber(entry.fundingRate);

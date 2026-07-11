@@ -19,7 +19,7 @@ type LoadOptions = {
   existingPosition?: PositionRow | null;
   existingPerpState?: PerpStateRow | null;
   loadedFilledOrder?: Record<string, unknown> | null;
-  persistedParams?: { leverage?: number; reduceOnly?: boolean; takerFeeRate?: number } | null;
+  persistedParams?: { leverage: number; reduceOnly: boolean; takerFeeRate: number } | null;
   quoteBySymbol?: Record<string, { price: number; bid?: number; ask?: number }>;
   executeFillResult?: { nextBalance: number; nextPosition: { quantity: number; avgCost: number } | null; feePaid: number };
   executePerpFillResult?: {
@@ -195,7 +195,7 @@ describe("createOrderPlacementService", () => {
     ).resolves.toMatchObject({ kind: "error", status: 404, code: "MARKET_NOT_FOUND" });
 
     const spotAdapter = {
-      capabilities: ["quote"],
+      normalizeReference: vi.fn(async (reference: string) => reference),
       getQuote: vi.fn().mockResolvedValue({ price: 10 }),
       getTradingConstraints: vi.fn().mockResolvedValue({ minQuantity: 1, quantityStep: 1, supportsFractional: false, maxLeverage: null }),
     };
@@ -220,7 +220,7 @@ describe("createOrderPlacementService", () => {
   it("enforces normalized trading constraints before placing orders", async () => {
     const { createOrderPlacementService } = await loadModule();
     const perpAdapter = {
-      capabilities: ["quote", "funding"],
+      getFundingRate: vi.fn(),
       normalizeReference: vi.fn().mockResolvedValue("BTC"),
       getQuote: vi.fn().mockResolvedValue({ price: 100, ask: 101, bid: 99 }),
       getTradingConstraints: vi.fn().mockResolvedValue({ minQuantity: 2, quantityStep: 0.5, supportsFractional: false, maxLeverage: 3 }),
@@ -252,10 +252,11 @@ describe("createOrderPlacementService", () => {
 
   it("stores non-crossing or unquotable limit orders as pending with execution params", async () => {
     const { createOrderPlacementService, inserted } = await loadModule();
+    const { MarketAdapterError } = await import("@unimarket/markets");
     const adapter = {
-      capabilities: ["quote", "funding"],
+      getFundingRate: vi.fn(),
       normalizeReference: vi.fn().mockResolvedValue("BTC"),
-      getQuote: vi.fn().mockRejectedValue(new Error("quote unavailable")),
+      getQuote: vi.fn().mockRejectedValue(new MarketAdapterError("UPSTREAM_ERROR", "quote unavailable")),
       getTradingConstraints: vi.fn().mockResolvedValue({ minQuantity: 1, quantityStep: 1, supportsFractional: false, maxLeverage: 5 }),
     };
     const service = createOrderPlacementService({ get: vi.fn(() => adapter) } as never);
@@ -285,6 +286,22 @@ describe("createOrderPlacementService", () => {
         }),
       ]),
     );
+
+    adapter.getQuote.mockRejectedValueOnce(new Error("unexpected implementation failure"));
+    await expect(
+      service.placeOrderForAccount({
+        account: { id: "acct_1", userId: "usr_1", balance: 100 },
+        order: {
+          market: "hyperliquid",
+          reference: "BTC",
+          side: "buy",
+          type: "limit",
+          quantity: 1,
+          limitPrice: 99,
+          reasoning: "invalid adapter behavior",
+        },
+      }),
+    ).rejects.toThrow("unexpected implementation failure");
   });
 
   it("fills spot market buys at ask and sells at bid, persisting trades and events", async () => {
@@ -292,7 +309,6 @@ describe("createOrderPlacementService", () => {
     const latestAccount = { id: "acct_1", userId: "usr_1", balance: 100 };
     const buyModule = await loadModule({ latestAccount, loadedFilledOrder: buyLoadedOrder });
     const adapter = {
-      capabilities: ["quote"],
       normalizeReference: vi.fn().mockResolvedValue("YES"),
       getQuote: vi.fn().mockResolvedValue({ price: 10, ask: 11, bid: 9 }),
       getTradingConstraints: vi.fn().mockResolvedValue({ minQuantity: 1, quantityStep: 1, supportsFractional: false, maxLeverage: null }),
@@ -347,7 +363,7 @@ describe("createOrderPlacementService", () => {
       },
     });
     const service = createOrderPlacementService({
-      get: vi.fn(() => ({ capabilities: ["funding", "quote"] })),
+      get: vi.fn(() => ({ getFundingRate: vi.fn() })),
     } as never);
 
     await expect(
@@ -386,5 +402,40 @@ describe("createOrderPlacementService", () => {
         executionPrice: 100,
       }),
     ).resolves.toEqual({ kind: "skipped", reason: "ORDER_NOT_PENDING" });
+  });
+
+  it("fails when persisted execution state is incomplete", async () => {
+    const pendingOrder = {
+      id: "ord_1",
+      accountId: "acct_1",
+      market: "hyperliquid",
+      symbol: "BTC",
+      side: "buy",
+      type: "limit",
+      quantity: 2,
+      limitPrice: 100,
+      status: "pending",
+      reasoning: "resting",
+    } as never;
+
+    const missingParamsModule = await loadModule();
+    const missingParamsService = missingParamsModule.createOrderPlacementService({
+      get: vi.fn(() => ({ getFundingRate: vi.fn() })),
+    } as never);
+    await expect(
+      missingParamsService.fillPendingOrder({ pendingOrder, executionPrice: 100 }),
+    ).rejects.toThrow("Execution parameters missing for pending order ord_1");
+
+    const missingPerpStateModule = await loadModule({
+      latestAccount: { id: "acct_1", userId: "usr_1", balance: 100 },
+      existingPosition: { id: "pos_1", accountId: "acct_1", market: "hyperliquid", symbol: "BTC", quantity: 1, avgCost: 95 },
+      persistedParams: { leverage: 5, reduceOnly: false, takerFeeRate: 0.01 },
+    });
+    const missingPerpStateService = missingPerpStateModule.createOrderPlacementService({
+      get: vi.fn(() => ({ getFundingRate: vi.fn() })),
+    } as never);
+    await expect(
+      missingPerpStateService.fillPendingOrder({ pendingOrder, executionPrice: 100 }),
+    ).rejects.toThrow("Perpetual position state missing for position pos_1");
   });
 });

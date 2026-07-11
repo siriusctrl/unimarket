@@ -245,7 +245,6 @@ export class PolymarketAdapter implements MarketAdapter {
   readonly description = "Prediction markets - contracts typically settle to 0 or 1";
   readonly referenceFormat = "Market reference (slug, condition ID, or token ID)";
   readonly priceRange: [number, number] = [0.01, 0.99];
-  readonly capabilities = ["search", "browse", "quote", "orderbook", "resolve", "priceHistory"] as const;
   readonly browseOptions = POLYMARKET_BROWSE_OPTIONS;
   readonly searchSortOptions = POLYMARKET_BROWSE_OPTIONS;
   readonly priceHistory = POLYMARKET_PRICE_HISTORY;

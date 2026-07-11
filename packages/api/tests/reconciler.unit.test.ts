@@ -91,7 +91,6 @@ const loadModule = async (options: LoadOptions = {}) => {
     get: vi.fn((market: string) => {
       if (options.missingMarkets?.includes(market)) return undefined;
       return {
-        capabilities: market === "perp" ? ["funding", "quote"] : ["quote"],
         getQuote: vi.fn(async (symbol: string) => {
           const key = `${market}:${symbol}`;
           const error = options.quoteErrorsBySymbolKey?.[key];

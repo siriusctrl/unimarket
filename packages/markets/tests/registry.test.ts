@@ -9,9 +9,10 @@ const adapter: MarketAdapter = {
   description: "mock",
   referenceFormat: "id",
   priceRange: null,
-  capabilities: ["search", "quote"],
   search: async () => [],
+  normalizeReference: async (reference) => reference,
   getQuote: async (reference) => ({ reference, price: 1, timestamp: new Date().toISOString() }),
+  getTradingConstraints: async () => ({ minQuantity: 1, quantityStep: 1, supportsFractional: false, maxLeverage: null }),
 };
 
 describe("MarketRegistry", () => {

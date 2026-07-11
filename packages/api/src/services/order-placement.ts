@@ -4,7 +4,7 @@ import {
   executePerpFill,
   type PlaceOrderInput,
 } from "@unimarket/core";
-import type { MarketAdapter, MarketRegistry, TradingConstraints } from "@unimarket/markets";
+import { getExecutionPrice, MarketAdapterError, type MarketRegistry } from "@unimarket/markets";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../db/client.js";
@@ -13,13 +13,6 @@ import { eventBus } from "../platform/events.js";
 import { getTakerFeeRate } from "../fees.js";
 import { getFirst } from "../platform/helpers.js";
 import { makeId, nowIso } from "../utils.js";
-
-const DEFAULT_TRADING_CONSTRAINTS: TradingConstraints = {
-  minQuantity: 1,
-  quantityStep: 1,
-  supportsFractional: false,
-  maxLeverage: null,
-};
 
 type AccountRow = typeof accounts.$inferSelect;
 type OrderRow = typeof orders.$inferSelect;
@@ -97,43 +90,11 @@ type PersistFilledOrderResult =
   | { kind: "account_not_found" }
   | { kind: "order_not_pending" };
 
-const normalizeTradingConstraints = (constraints: TradingConstraints | null | undefined): TradingConstraints => {
-  if (!constraints) return DEFAULT_TRADING_CONSTRAINTS;
-  const minQuantity = Number.isFinite(constraints.minQuantity) && constraints.minQuantity > 0
-    ? constraints.minQuantity
-    : DEFAULT_TRADING_CONSTRAINTS.minQuantity;
-  const quantityStep = Number.isFinite(constraints.quantityStep) && constraints.quantityStep > 0
-    ? constraints.quantityStep
-    : DEFAULT_TRADING_CONSTRAINTS.quantityStep;
-  const maxLeverage = constraints.maxLeverage ?? null;
-  return {
-    minQuantity,
-    quantityStep,
-    supportsFractional: Boolean(constraints.supportsFractional),
-    maxLeverage: typeof maxLeverage === "number" && Number.isFinite(maxLeverage) && maxLeverage > 0 ? maxLeverage : null,
-  };
-};
-
 const isStepAligned = (quantity: number, step: number): boolean => {
   const units = quantity / step;
   const rounded = Math.round(units);
   const epsilon = Math.max(1e-9, Math.abs(step) * 1e-9);
   return Math.abs(units - rounded) <= epsilon;
-};
-
-const resolveTradingConstraints = async (adapter: MarketAdapter, symbol: string): Promise<TradingConstraints> => {
-  if (typeof adapter.getTradingConstraints !== "function") {
-    return DEFAULT_TRADING_CONSTRAINTS;
-  }
-  const constraints = await adapter.getTradingConstraints(symbol);
-  return normalizeTradingConstraints(constraints);
-};
-
-const quoteSidePrice = (
-  side: PlaceOrderInput["side"],
-  price: { price: number; bid?: number; ask?: number },
-): number => {
-  return side === "buy" ? (price.ask ?? price.price) : (price.bid ?? price.price);
 };
 
 type PredictionTx = {
@@ -184,13 +145,12 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
 
   const isPerpMarket = (marketId: string): boolean => {
     const adapter = registry.get(marketId);
-    return Boolean(adapter?.capabilities.includes("funding"));
+    return Boolean(adapter?.getFundingRate);
   };
 
   const loadExecutionOptions = async (
     source: PersistFilledOrderParams["source"],
     orderId: string,
-    market: string,
   ): Promise<FillExecutionOptions> => {
     if (source.kind === "new") {
       return source.executionOptions;
@@ -202,11 +162,11 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
       .where(eq(orderExecutionParams.orderId, orderId))
       .get();
 
-    return {
-      leverage: persistedParams?.leverage ?? 1,
-      reduceOnly: persistedParams?.reduceOnly ?? false,
-      takerFeeRate: persistedParams?.takerFeeRate ?? getTakerFeeRate(market),
-    };
+    if (!persistedParams) {
+      throw new Error(`Execution parameters missing for pending order ${orderId}`);
+    }
+
+    return persistedParams;
   };
 
   const persistFilledOrder = async ({
@@ -218,7 +178,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
     source,
   }: PersistFilledOrderParams): Promise<PersistFilledOrderResult> => {
     const isPerp = isPerpMarket(order.market);
-    const executionOptions = await loadExecutionOptions(source, orderId, order.market);
+    const executionOptions = await loadExecutionOptions(source, orderId);
 
     const persistenceResult = await db.transaction(async (tx) => {
       const latestAccount = await getFirst(tx.select().from(accounts).where(eq(accounts.id, accountId)).limit(1).all());
@@ -236,9 +196,10 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
         ? await tx.select().from(perpPositionState).where(eq(perpPositionState.positionId, existingPosition.id)).get()
         : null;
 
-      const spotFillResult = isPerp
-        ? null
-        : executeFill({
+      let perpFillResult: ReturnType<typeof executePerpFill> | null = null;
+      const fillResult = (() => {
+        if (!isPerp) {
+          return executeFill({
             balance: latestAccount.balance,
             position: existingPosition ? { quantity: existingPosition.quantity, avgCost: existingPosition.avgCost } : null,
             side: order.side,
@@ -247,38 +208,42 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
             allowShort: false,
             takerFeeRate: executionOptions.takerFeeRate,
           });
-      const perpFillResult = isPerp
-        ? executePerpFill({
-            balance: latestAccount.balance,
-            position: existingPosition
-              ? {
-                  quantity: existingPosition.quantity,
-                  avgCost: existingPosition.avgCost,
-                  margin:
-                    existingPerpState?.margin ??
-                    Number(
-                      (
-                        Math.abs(existingPosition.quantity * existingPosition.avgCost) /
-                        Math.max(existingPerpState?.leverage ?? executionOptions.leverage, 1)
-                      ).toFixed(6),
-                    ),
-                  leverage: existingPerpState?.leverage ?? executionOptions.leverage,
-                  maintenanceMarginRatio: existingPerpState?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
-                }
-              : null,
-            side: order.side,
-            quantity: order.quantity,
-            price: executionPrice,
-            leverage: executionOptions.leverage,
-            maintenanceMarginRatio: existingPerpState?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
-            reduceOnly: executionOptions.reduceOnly,
-            takerFeeRate: executionOptions.takerFeeRate,
-          })
-        : null;
-      const fillResult = isPerp ? perpFillResult : spotFillResult;
-      if (!fillResult) {
-        throw new Error("Order fill result not generated");
-      }
+        }
+
+        if (existingPosition && !existingPerpState) {
+          throw new Error(`Perpetual position state missing for position ${existingPosition.id}`);
+        }
+
+        const currentPerpPosition = existingPosition && existingPerpState
+          ? {
+              quantity: existingPosition.quantity,
+              avgCost: existingPosition.avgCost,
+              margin: existingPerpState.margin,
+              leverage: existingPerpState.leverage,
+              maintenanceMarginRatio: existingPerpState.maintenanceMarginRatio,
+            }
+          : null;
+
+        perpFillResult = executePerpFill({
+          balance: latestAccount.balance,
+          position: currentPerpPosition,
+          side: order.side,
+          quantity: order.quantity,
+          price: executionPrice,
+          leverage: executionOptions.leverage,
+          maintenanceMarginRatio: existingPerpState?.maintenanceMarginRatio ?? defaultMaintenanceMarginRatio,
+          reduceOnly: executionOptions.reduceOnly,
+          takerFeeRate: executionOptions.takerFeeRate,
+        });
+        return perpFillResult;
+      })();
+
+      const requirePerpPosition = () => {
+        if (!perpFillResult?.nextPosition) {
+          throw new Error(`Perpetual fill did not produce position state for order ${orderId}`);
+        }
+        return perpFillResult.nextPosition;
+      };
 
       if (source.kind === "new") {
         await tx
@@ -348,10 +313,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
           .run();
 
         if (isPerp) {
-          const perpNextPosition = perpFillResult?.nextPosition;
-          if (!perpNextPosition) {
-            throw new Error("Perp position state missing for filled order");
-          }
+          const perpNextPosition = requirePerpPosition();
           const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
           await tx
             .insert(perpPositionState)
@@ -393,10 +355,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
           .run();
 
         if (isPerp) {
-          const perpNextPosition = perpFillResult?.nextPosition;
-          if (!perpNextPosition) {
-            throw new Error("Perp position state missing for filled order");
-          }
+          const perpNextPosition = requirePerpPosition();
           const liquidationPrice = calculatePerpLiquidationPrice(perpNextPosition);
           await tx
             .insert(perpPositionState)
@@ -503,11 +462,8 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
       return { kind: "error", status: 400, code: "INVALID_INPUT", message: "reduceOnly is only supported for perpetual markets" };
     }
 
-    const normalizedSymbol =
-      typeof adapter.normalizeReference === "function"
-        ? await adapter.normalizeReference(order.reference)
-        : order.reference;
-    const tradingConstraints = await resolveTradingConstraints(adapter, normalizedSymbol);
+    const normalizedSymbol = await adapter.normalizeReference(order.reference);
+    const tradingConstraints = await adapter.getTradingConstraints(normalizedSymbol);
 
     if (order.quantity < tradingConstraints.minQuantity) {
       return {
@@ -528,7 +484,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
     if (!tradingConstraints.supportsFractional && !Number.isInteger(order.quantity)) {
       return { kind: "error", status: 400, code: "INVALID_INPUT", message: "quantity must be an integer for this market" };
     }
-    const maxLeverage = tradingConstraints.maxLeverage ?? null;
+    const maxLeverage = tradingConstraints.maxLeverage;
     if (perpMarket && maxLeverage !== null && requestedLeverage > maxLeverage) {
       return {
         kind: "error",
@@ -543,12 +499,18 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
       let observedPrice: number | null = null;
       try {
         const quote = await adapter.getQuote(normalizedSymbol);
-        const candidatePrice = quoteSidePrice(order.side, quote);
+        const candidatePrice = getExecutionPrice(quote, order.side);
         observedPrice = candidatePrice;
         const limitPrice = order.limitPrice as number;
         const shouldFillNow = order.side === "buy" ? candidatePrice <= limitPrice : candidatePrice >= limitPrice;
         if (shouldFillNow) executionPrice = candidatePrice;
-      } catch {
+      } catch (error) {
+        if (
+          !(error instanceof MarketAdapterError) ||
+          (error.code !== "UPSTREAM_ERROR" && error.code !== "UPSTREAM_TIMEOUT")
+        ) {
+          throw error;
+        }
         executionPrice = null;
         observedPrice = null;
       }
@@ -628,7 +590,7 @@ export const createOrderPlacementService = (registry: MarketRegistry) => {
     }
 
     const quote = await adapter.getQuote(normalizedSymbol);
-    const executionPrice = quoteSidePrice(order.side, quote);
+    const executionPrice = getExecutionPrice(quote, order.side);
     return persistNewFilledOrder({
       accountId: account.id,
       orderId,

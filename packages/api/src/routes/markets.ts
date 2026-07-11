@@ -3,7 +3,6 @@ import {
   MarketAdapterError,
   type MarketRegistry,
   type Quote,
-  type TradingConstraints,
 } from "@unimarket/markets";
 import { Hono } from "hono";
 
@@ -13,13 +12,6 @@ import { parseQuery, withErrorHandling } from "../platform/helpers.js";
 
 export const createMarketRoutes = (registry: MarketRegistry) => {
   const router = new Hono<{ Variables: AppVariables }>();
-  const defaultTradingConstraints: TradingConstraints = {
-    minQuantity: 1,
-    quantityStep: 1,
-    supportsFractional: false,
-    maxLeverage: null,
-  };
-
   const toBatchError = (error: unknown): { code: string; message: string } => {
     if (error instanceof MarketAdapterError) {
       return { code: error.code, message: error.message };
@@ -63,6 +55,18 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
     hasMore: results.length > limit,
   });
 
+  const collectBatchResults = <T>(references: string[], settled: PromiseSettledResult<T>[]) => {
+    const values: T[] = [];
+    const errors: Array<{ reference: string; error: { code: string; message: string } }> = [];
+
+    settled.forEach((result, index) => {
+      if (result.status === "fulfilled") values.push(result.value);
+      else errors.push({ reference: references[index]!, error: toBatchError(result.reason) });
+    });
+
+    return { values, errors };
+  };
+
   router.get(
     "/",
     withErrorHandling(async (c) => {
@@ -78,9 +82,6 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("search")) {
-        return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "search is not supported for this market");
-      }
       const sortError = validateSort(parsed.data.sort, adapter.searchSortOptions ?? []);
       if (sortError) return jsonError(c, 400, "INVALID_INPUT", sortError);
 
@@ -101,7 +102,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("browse") || typeof adapter.browse !== "function") {
+      if (!adapter.browse) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "browse is not supported for this market");
       }
       const sortError = validateSort(parsed.data.sort, adapter.browseOptions ?? []);
@@ -125,10 +126,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
 
-      const constraints =
-        typeof adapter.getTradingConstraints === "function"
-          ? await adapter.getTradingConstraints(parsed.data.reference)
-          : defaultTradingConstraints;
+      const constraints = await adapter.getTradingConstraints(parsed.data.reference);
       return c.json({
         reference: parsed.data.reference,
         constraints: {
@@ -149,10 +147,6 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("quote")) {
-        return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "quote is not supported for this market");
-      }
-
       const quote = await adapter.getQuote(parsed.data.reference);
       return c.json(enrichQuote(quote));
     }),
@@ -166,27 +160,8 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("quote")) {
-        return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "quote is not supported for this market");
-      }
-
       const settled = await Promise.allSettled(parsed.data.references.map(async (reference) => enrichQuote(await adapter.getQuote(reference))));
-      const quotes: unknown[] = [];
-      const errors: Array<{ reference: string; error: { code: string; message: string } }> = [];
-
-      for (let i = 0; i < settled.length; i += 1) {
-        const reference = parsed.data.references[i];
-        const result = settled[i];
-        if (!reference || !result) continue;
-
-        if (result.status === "fulfilled") {
-          quotes.push(result.value);
-          continue;
-        }
-
-        errors.push({ reference, error: toBatchError(result.reason) });
-      }
-
+      const { values: quotes, errors } = collectBatchResults(parsed.data.references, settled);
       return c.json({ quotes, errors });
     }),
   );
@@ -199,7 +174,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("orderbook") || typeof adapter.getOrderbook !== "function") {
+      if (!adapter.getOrderbook) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "orderbook is not supported for this market");
       }
 
@@ -216,27 +191,13 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("orderbook") || typeof adapter.getOrderbook !== "function") {
+      const getOrderbook = adapter.getOrderbook?.bind(adapter);
+      if (!getOrderbook) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "orderbook is not supported for this market");
       }
 
-      const settled = await Promise.allSettled(parsed.data.references.map(async (reference) => adapter.getOrderbook!(reference)));
-      const orderbooks: unknown[] = [];
-      const errors: Array<{ reference: string; error: { code: string; message: string } }> = [];
-
-      for (let i = 0; i < settled.length; i += 1) {
-        const reference = parsed.data.references[i];
-        const result = settled[i];
-        if (!reference || !result) continue;
-
-        if (result.status === "fulfilled") {
-          orderbooks.push(result.value);
-          continue;
-        }
-
-        errors.push({ reference, error: toBatchError(result.reason) });
-      }
-
+      const settled = await Promise.allSettled(parsed.data.references.map(getOrderbook));
+      const { values: orderbooks, errors } = collectBatchResults(parsed.data.references, settled);
       return c.json({ orderbooks, errors });
     }),
   );
@@ -249,7 +210,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("funding") || typeof adapter.getFundingRate !== "function") {
+      if (!adapter.getFundingRate) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "funding is not supported for this market");
       }
 
@@ -266,27 +227,13 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("funding") || typeof adapter.getFundingRate !== "function") {
+      const getFundingRate = adapter.getFundingRate?.bind(adapter);
+      if (!getFundingRate) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "funding is not supported for this market");
       }
 
-      const settled = await Promise.allSettled(parsed.data.references.map(async (reference) => adapter.getFundingRate!(reference)));
-      const fundings: unknown[] = [];
-      const errors: Array<{ reference: string; error: { code: string; message: string } }> = [];
-
-      for (let i = 0; i < settled.length; i += 1) {
-        const reference = parsed.data.references[i];
-        const result = settled[i];
-        if (!reference || !result) continue;
-
-        if (result.status === "fulfilled") {
-          fundings.push(result.value);
-          continue;
-        }
-
-        errors.push({ reference, error: toBatchError(result.reason) });
-      }
-
+      const settled = await Promise.allSettled(parsed.data.references.map(getFundingRate));
+      const { values: fundings, errors } = collectBatchResults(parsed.data.references, settled);
       return c.json({ fundings, errors });
     }),
   );
@@ -299,7 +246,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("priceHistory") || typeof adapter.getPriceHistory !== "function") {
+      if (!adapter.getPriceHistory) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "priceHistory is not supported for this market");
       }
 
@@ -322,7 +269,7 @@ export const createMarketRoutes = (registry: MarketRegistry) => {
 
       const adapter = registry.get(c.req.param("market"));
       if (!adapter) return jsonError(c, 404, "MARKET_NOT_FOUND", "Market not found");
-      if (!adapter.capabilities.includes("resolve") || typeof adapter.resolve !== "function") {
+      if (!adapter.resolve) {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "resolve is not supported for this market");
       }
 

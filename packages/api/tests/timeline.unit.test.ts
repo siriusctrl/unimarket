@@ -157,7 +157,7 @@ describe("buildTimelineEvents", () => {
           grossPayout: 1,
           feeCharged: 0.1,
           netPayout: 0.9,
-          cancelledReduceOnlyOrderIds: "{bad json",
+          cancelledReduceOnlyOrderIds: JSON.stringify(["ord_reduce_only"]),
           reasoning: "liq",
           createdAt: "2026-03-07T00:05:00.000Z",
         },
@@ -189,7 +189,7 @@ describe("buildTimelineEvents", () => {
     expect(events.find((event) => event.type === "position.liquidated")).toMatchObject({
       data: {
         symbolName: "Election market — Yes",
-        cancelledReduceOnlyOrderIds: [],
+        cancelledReduceOnlyOrderIds: ["ord_reduce_only"],
       },
     });
   });

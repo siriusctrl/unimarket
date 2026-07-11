@@ -1,4 +1,4 @@
-import type { MarketAdapter, MarketDescriptor } from "./types.js";
+import { getMarketCapabilities, type MarketAdapter, type MarketDescriptor } from "./types.js";
 
 export class MarketRegistry {
   private readonly adapters = new Map<string, MarketAdapter>();
@@ -22,7 +22,7 @@ export class MarketRegistry {
       description: adapter.description,
       referenceFormat: adapter.referenceFormat,
       priceRange: adapter.priceRange,
-      capabilities: adapter.capabilities,
+      capabilities: getMarketCapabilities(adapter),
       browseOptions: adapter.browseOptions ?? [],
       searchSortOptions: adapter.searchSortOptions ?? [],
       priceHistory: adapter.priceHistory ?? null,

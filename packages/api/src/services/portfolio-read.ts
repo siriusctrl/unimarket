@@ -261,7 +261,7 @@ const enrichPositions = async ({
     }
 
     const perpState = perpStateByPositionId.get(row.id);
-    const isPerp = Boolean(adapter?.capabilities.includes("funding") && perpState);
+    const isPerp = Boolean(adapter?.getFundingRate && perpState);
     const currentPrice = quoteLookup.kind === "priced" ? quoteLookup.price : null;
     const quoteTimestamp = quoteLookup.kind === "priced" ? quoteLookup.timestamp : null;
     const unrealizedPnl = currentPrice === null
