@@ -4,7 +4,7 @@ import {
     DEFAULT_PRICE_HISTORY_LOOKBACKS_BY_INTERVAL,
     DEFAULT_PRICE_HISTORY_MAX_CANDLES,
     DEFAULT_PRICE_HISTORY_SUPPORTED_LOOKBACKS,
-    PRICE_HISTORY_INTERVAL_MS,
+    floorTimestampToInterval,
     resolvePriceHistoryRange,
 } from "./history.js";
 import {
@@ -44,6 +44,8 @@ const CANDLE_TTL_MS: Record<string, number> = {
     "1h": 300_000,
     "4h": 600_000,
     "1d": 1_800_000,
+    "1w": 1_800_000,
+    "1mo": 1_800_000,
 };
 const HYPERLIQUID_BROWSE_OPTIONS: readonly BrowseOption[] = [
     { value: "price", label: "Price" },
@@ -51,8 +53,8 @@ const HYPERLIQUID_BROWSE_OPTIONS: readonly BrowseOption[] = [
     { value: "openInterest", label: "Open Interest" },
 ];
 const HYPERLIQUID_PRICE_HISTORY: PriceHistorySupport = {
-    nativeIntervals: ["1m", "5m", "15m", "1h", "4h", "1d"],
-    supportedIntervals: ["1m", "5m", "15m", "1h", "4h", "1d"],
+    nativeIntervals: ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"],
+    supportedIntervals: ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"],
     defaultInterval: "1h",
     supportedLookbacks: DEFAULT_PRICE_HISTORY_SUPPORTED_LOOKBACKS,
     defaultLookbacks: DEFAULT_PRICE_HISTORY_LOOKBACKS_BY_INTERVAL,
@@ -776,9 +778,9 @@ export class HyperliquidAdapter implements MarketAdapter {
     async getPriceHistory(reference: string, options?: PriceHistoryOptions): Promise<PriceHistoryResult> {
         const normalizedSymbol = await this.normalizeReference(reference);
         const { interval, range } = resolvePriceHistoryRange(this.priceHistory, options);
-        const barMs = PRICE_HISTORY_INTERVAL_MS[interval];
-        const endTime = Math.floor(Date.parse(range.endTime) / barMs) * barMs;
-        const startTime = Math.floor(Date.parse(range.startTime) / barMs) * barMs;
+        const endTime = floorTimestampToInterval(Date.parse(range.endTime), interval);
+        const startTime = floorTimestampToInterval(Date.parse(range.startTime), interval);
+        const upstreamInterval = interval === "1mo" ? "1M" : interval;
         const effectiveRange = {
             ...range,
             asOf: new Date(endTime).toISOString(),
@@ -796,7 +798,7 @@ export class HyperliquidAdapter implements MarketAdapter {
                     type: "candleSnapshot",
                     req: {
                         coin: normalizedSymbol,
-                        interval,
+                        interval: upstreamInterval,
                         startTime,
                         endTime,
                     },

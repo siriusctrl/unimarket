@@ -246,6 +246,27 @@ const migrationStatements = [
   `CREATE INDEX IF NOT EXISTS liquidations_order_id_idx ON liquidations(order_id)`,
   `CREATE INDEX IF NOT EXISTS liquidations_market_symbol_idx ON liquidations(market, symbol)`,
   `CREATE INDEX IF NOT EXISTS liquidations_created_at_idx ON liquidations(created_at)`,
+  `
+  CREATE TABLE IF NOT EXISTS chart_analyses (
+    id TEXT PRIMARY KEY,
+    supersedes_id TEXT,
+    version INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    market TEXT NOT NULL,
+    reference TEXT NOT NULL,
+    interval TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    document TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    reasoning TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    published_at TEXT
+  )
+  `,
+  `CREATE INDEX IF NOT EXISTS chart_analyses_instrument_idx ON chart_analyses(market, reference, created_at)`,
+  `CREATE INDEX IF NOT EXISTS chart_analyses_status_idx ON chart_analyses(status)`,
+  `CREATE INDEX IF NOT EXISTS chart_analyses_created_by_idx ON chart_analyses(created_by)`,
 ];
 
 const additiveMigrationStatements = [

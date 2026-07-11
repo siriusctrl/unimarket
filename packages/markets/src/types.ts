@@ -9,9 +9,9 @@ export type CandleData = {
   volume: number;
 };
 
-export type PriceHistoryInterval = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+export type PriceHistoryInterval = "1m" | "5m" | "15m" | "1h" | "4h" | "1d" | "1w" | "1mo";
 
-export type PriceHistoryLookback = "1h" | "4h" | "1d" | "7d" | "30d";
+export type PriceHistoryLookback = "1h" | "4h" | "1d" | "7d" | "30d" | "90d" | "1y" | "5y";
 
 export type PriceHistorySupport = {
   nativeIntervals: readonly PriceHistoryInterval[];

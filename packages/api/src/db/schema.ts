@@ -300,3 +300,28 @@ export const liquidations = sqliteTable(
     index("liquidations_created_at_idx").on(table.createdAt),
   ],
 );
+
+export const chartAnalyses = sqliteTable(
+  "chart_analyses",
+  {
+    id: text("id").primaryKey(),
+    supersedesId: text("supersedes_id"),
+    version: integer("version").notNull(),
+    status: text("status").notNull(),
+    market: text("market").notNull(),
+    reference: text("reference").notNull(),
+    interval: text("interval").notNull(),
+    snapshotHash: text("snapshot_hash").notNull(),
+    document: text("document").notNull(),
+    createdBy: text("created_by").notNull(),
+    reasoning: text("reasoning").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    publishedAt: text("published_at"),
+  },
+  (table) => [
+    index("chart_analyses_instrument_idx").on(table.market, table.reference, table.createdAt),
+    index("chart_analyses_status_idx").on(table.status),
+    index("chart_analyses_created_by_idx").on(table.createdBy),
+  ],
+);

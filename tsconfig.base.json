@@ -5,6 +5,7 @@
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
+      "@unimarket/analysis": ["packages/analysis/src/index.ts"],
       "@unimarket/core": ["packages/core/src/index.ts"],
       "@unimarket/markets": ["packages/markets/src/index.ts"]
     },

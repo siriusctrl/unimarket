@@ -12,10 +12,11 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@unimarket/core": "workspace:*",
-    "@unimarket/markets": "workspace:*",
     "@hono/node-server": "^1.14.2",
     "@libsql/client": "^0.15.2",
+    "@unimarket/analysis": "workspace:^",
+    "@unimarket/core": "workspace:*",
+    "@unimarket/markets": "workspace:*",
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.3",
     "zod": "^3.24.2"

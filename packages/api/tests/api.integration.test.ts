@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { INITIAL_BALANCE } from "@unimarket/core";
+import { CHART_ANALYSIS_SCHEMA } from "@unimarket/analysis";
 import { MarketAdapterError, MarketRegistry, type MarketAdapter } from "@unimarket/markets";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +54,16 @@ const polymarketAdapter: MarketAdapter = {
   priceRange: [0.01, 0.99],
   browseOptions: [{ value: "volume", label: "Volume" }],
   searchSortOptions: [{ value: "volume", label: "Volume" }],
+  priceHistory: {
+    nativeIntervals: ["1d"],
+    supportedIntervals: ["1d"],
+    defaultInterval: "1d",
+    supportedLookbacks: ["1y"],
+    defaultLookbacks: { "1d": "1y" },
+    maxCandles: 2_000,
+    supportsCustomRange: true,
+    supportsResampling: false,
+  },
   search: async (query) => {
     const lowered = query.toLowerCase();
     return [
@@ -83,6 +94,42 @@ const polymarketAdapter: MarketAdapter = {
     asks: [{ price: 0.51, size: 130 }],
     timestamp: new Date().toISOString(),
   }),
+  getPriceHistory: async (reference, options) => {
+    const candles = Array.from({ length: 60 }, (_, index) => {
+      const open = 100 + index;
+      return {
+        timestamp: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
+        open,
+        high: open + 3,
+        low: open - 2,
+        close: open + 1,
+        volume: 1_000 + index * 20,
+      };
+    });
+    return {
+      reference,
+      interval: options?.interval ?? "1d",
+      resampledFrom: null,
+      range: {
+        mode: "lookback",
+        lookback: options?.lookback ?? "1y",
+        asOf: candles.at(-1)!.timestamp,
+        startTime: candles[0].timestamp,
+        endTime: candles.at(-1)!.timestamp,
+      },
+      candles,
+      summary: {
+        open: candles[0].open,
+        close: candles.at(-1)!.close,
+        change: candles.at(-1)!.close - candles[0].open,
+        changePct: 60,
+        high: candles.at(-1)!.high,
+        low: candles[0].low,
+        volume: candles.reduce((sum, candle) => sum + candle.volume, 0),
+        candleCount: candles.length,
+      },
+    };
+  },
   resolve: async (reference) => ({
     reference,
     resolved: false,
@@ -167,6 +214,7 @@ const fundingAdapter: MarketAdapter = {
 };
 
 const resetDatabase = async (): Promise<void> => {
+  await sqlite.execute("DELETE FROM chart_analyses");
   await sqlite.execute("DELETE FROM prediction_scores");
   await sqlite.execute("DELETE FROM predictions");
   await sqlite.execute("DELETE FROM trades");
@@ -929,6 +977,108 @@ describe("api integration", () => {
 
     expect(quoteSpy).toHaveBeenCalled();
     expect(orderbookSpy).toHaveBeenCalled();
+  });
+
+  it("serves provider-neutral chart context and persists immutable analysis documents", async () => {
+    const user = await registerUser("analysis-agent");
+    const schemaResponse = await app.request("/api/analysis/schema");
+    expect(schemaResponse.status).toBe(200);
+    expect(await schemaResponse.json()).toMatchObject({
+      schema: CHART_ANALYSIS_SCHEMA,
+      arbitraryCodeAllowed: false,
+      coordinateSystem: "time-price",
+      drawingContracts: { trendLine: { coordinates: ["anchors[2]", "extend.left", "extend.right"] } },
+      indicatorContracts: { volumeProfile: { parameters: expect.arrayContaining(["method=ohlcv-range-approximation"]) } },
+    });
+    const contextResponse = await app.request(
+      "/api/analysis/context?market=polymarket&reference=MU&interval=1d&lookback=1y",
+    );
+    expect(contextResponse.status).toBe(200);
+    const context = await contextResponse.json();
+    expect(context).toMatchObject({
+      schema: "unimarket.chart-context/v1",
+      instrument: { market: "polymarket", reference: "MU" },
+      data: { interval: "1d", snapshotHash: expect.stringMatching(/^sha256:/) },
+      dataQuality: { candleCount: 60, volumeAvailable: true },
+    });
+    expect(context.indicators.map((indicator: { type: string }) => indicator.type)).toEqual([
+      "sma",
+      "ema",
+      "rsi",
+      "volumeProfile",
+    ]);
+
+    const document = {
+      schema: CHART_ANALYSIS_SCHEMA,
+      title: "MU daily structure",
+      instrument: { market: "polymarket", reference: "MU" },
+      data: {
+        interval: "1d",
+        from: context.data.range.startTime,
+        to: context.data.range.endTime,
+        asOf: context.data.range.asOf,
+        snapshotHash: context.data.snapshotHash,
+      },
+      viewport: { priceScale: "auto" },
+      thesis: "A sequence of higher lows keeps the structure constructive.",
+      invalidation: "A close below the rising support invalidates the setup.",
+      layers: [
+        {
+          id: "rising-support",
+          type: "trendLine",
+          anchors: [
+            { time: context.data.candles[5].timestamp, price: context.data.candles[5].low },
+            { time: context.data.candles[35].timestamp, price: context.data.candles[35].low },
+          ],
+          extend: { right: true },
+          rationale: "Connects two confirmed daily swing lows.",
+          style: { color: "support" },
+        },
+      ],
+      metadata: {
+        createdBy: { kind: "agent", actorId: "provider-supplied-id" },
+        runId: "model-provider-opaque-run",
+        createdAt: context.data.range.asOf,
+      },
+    };
+
+    const createResponse = await authedJson("/api/analysis/documents", user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document, reasoning: "Persist technical analysis for visual review" }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json();
+    expect(created).toMatchObject({
+      status: "draft",
+      version: 1,
+      createdBy: user.userId,
+      document: { metadata: { createdBy: { actorId: user.userId }, runId: "model-provider-opaque-run" } },
+    });
+
+    const metadataResponse = await app.request(`/api/analysis/documents/${created.id}/render-metadata`);
+    expect(metadataResponse.status).toBe(200);
+    expect((await metadataResponse.json()).drawings[0]).toMatchObject({
+      id: "rising-support",
+      anchorsVisible: true,
+      clipped: false,
+    });
+
+    const publishResponse = await authedJson(`/api/analysis/documents/${created.id}/publish`, user.apiKey, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reasoning: "Rendered coordinates and thesis were reviewed" }),
+    });
+    expect(publishResponse.status).toBe(200);
+    expect((await publishResponse.json()).status).toBe("published");
+
+    const immutableResponse = await authedJson(`/api/analysis/documents/${created.id}`, user.apiKey, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document, reasoning: "Try to mutate published analysis" }),
+    });
+    expect(immutableResponse.status).toBe(409);
+    expect((await immutableResponse.json()).error.code).toBe("ANALYSIS_IMMUTABLE");
   });
 
   it("covers market endpoint exception handling branches and resolve null fallback", async () => {

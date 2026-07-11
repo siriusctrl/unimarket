@@ -114,8 +114,8 @@ export const multiQuoteQuerySchema = z.object({
     .refine((references) => references.length <= 50, { message: "references supports up to 50 values" }),
 });
 
-export const priceHistoryIntervalSchema = z.enum(["1m", "5m", "15m", "1h", "4h", "1d"]);
-export const priceHistoryLookbackSchema = z.enum(["1h", "4h", "1d", "7d", "30d"]);
+export const priceHistoryIntervalSchema = z.enum(["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"]);
+export const priceHistoryLookbackSchema = z.enum(["1h", "4h", "1d", "7d", "30d", "90d", "1y", "5y"]);
 
 const dateTimeQuerySchema = z
   .string()

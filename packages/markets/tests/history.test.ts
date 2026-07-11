@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildPriceHistoryResult,
+  floorTimestampToInterval,
   resampleCandles,
   resolvePriceHistoryRange,
   summarizeCandles,
@@ -205,6 +206,22 @@ describe("price history helpers", () => {
         close: 108,
         volume: 4,
       },
+    ]);
+  });
+
+  it("uses UTC calendar boundaries for weekly and monthly candles", () => {
+    expect(new Date(floorTimestampToInterval(Date.parse("2026-01-01T18:00:00.000Z"), "1w")).toISOString())
+      .toBe("2025-12-29T00:00:00.000Z");
+    expect(new Date(floorTimestampToInterval(Date.parse("2026-02-28T23:59:59.000Z"), "1mo")).toISOString())
+      .toBe("2026-02-01T00:00:00.000Z");
+
+    const monthly = resampleCandles([
+      { timestamp: "2026-01-31T00:00:00.000Z", open: 10, high: 12, low: 9, close: 11, volume: 3 },
+      { timestamp: "2026-02-01T00:00:00.000Z", open: 11, high: 14, low: 10, close: 13, volume: 5 },
+    ], "1mo");
+    expect(monthly.map((candle) => candle.timestamp)).toEqual([
+      "2026-01-01T00:00:00.000Z",
+      "2026-02-01T00:00:00.000Z",
     ]);
   });
 

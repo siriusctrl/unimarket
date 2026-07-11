@@ -4,6 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 
 import { adminOnlyMiddleware, authMiddleware, type AppVariables } from "./platform/auth.js";
 import { createAccountRoutes } from "./routes/account.js";
+import { createAnalysisRoutes } from "./routes/analysis.js";
 import { createAdminRoutes } from "./routes/admin.js";
 import { createDashboardRoutes } from "./routes/dashboard.js";
 import { auth as authRoutes } from "./routes/auth.js";
@@ -46,12 +47,14 @@ export const createApp = (options: CreateAppOptions = {}) => {
   app.use("/api/*", async (c, next) => {
     if (c.req.path === "/api/auth/register") return next();
     if (c.req.path.startsWith("/api/dashboard/")) return next();
+    if (c.req.method === "GET" && c.req.path.startsWith("/api/analysis/")) return next();
     return authMiddleware(c, next);
   });
 
   app.route("/api/auth", authRoutes);
 
   app.route("/api/account", createAccountRoutes(registry));
+  app.route("/api/analysis", createAnalysisRoutes(registry));
   app.route("/api/events", eventsRoutes);
   app.route("/api/orders", createOrderRoutes(registry));
   app.route("/api/positions", positionsRoutes);

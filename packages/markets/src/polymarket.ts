@@ -56,10 +56,12 @@ const CANDLE_TTL_MS: Record<string, number> = {
   "1h": 300_000,
   "4h": 600_000,
   "1d": 1_800_000,
+  "1w": 1_800_000,
+  "1mo": 1_800_000,
 };
 const POLYMARKET_PRICE_HISTORY: PriceHistorySupport = {
   nativeIntervals: ["1m", "1h", "1d"],
-  supportedIntervals: ["1m", "5m", "15m", "1h", "4h", "1d"],
+  supportedIntervals: ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1mo"],
   defaultInterval: "1h",
   supportedLookbacks: DEFAULT_PRICE_HISTORY_SUPPORTED_LOOKBACKS,
   defaultLookbacks: DEFAULT_PRICE_HISTORY_LOOKBACKS_BY_INTERVAL,
@@ -74,6 +76,8 @@ const POLYMARKET_SOURCE_INTERVAL: Record<PriceHistoryInterval, PriceHistoryInter
   "1h": "1h",
   "4h": "1h",
   "1d": "1d",
+  "1w": "1d",
+  "1mo": "1d",
 };
 const POLYMARKET_FIDELITY_MINUTES: Record<PriceHistoryInterval, number> = {
   "1m": 1,
@@ -82,6 +86,8 @@ const POLYMARKET_FIDELITY_MINUTES: Record<PriceHistoryInterval, number> = {
   "1h": 60,
   "4h": 60,
   "1d": 1440,
+  "1w": 1440,
+  "1mo": 1440,
 };
 
 const DEFAULT_GAMMA_BASE_URL = "https://gamma-api.polymarket.com";

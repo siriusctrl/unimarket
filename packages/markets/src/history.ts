@@ -17,18 +17,24 @@ export const PRICE_HISTORY_INTERVAL_MS: Record<PriceHistoryInterval, number> = {
   "1h": 60 * 60_000,
   "4h": 4 * 60 * 60_000,
   "1d": 24 * 60 * 60_000,
+  "1w": 7 * 24 * 60 * 60_000,
+  "1mo": 30 * 24 * 60 * 60_000,
 };
 
-export const DEFAULT_PRICE_HISTORY_SUPPORTED_LOOKBACKS: readonly PriceHistoryLookback[] = ["1h", "4h", "1d", "7d", "30d"];
+export const DEFAULT_PRICE_HISTORY_SUPPORTED_LOOKBACKS: readonly PriceHistoryLookback[] = [
+  "1h", "4h", "1d", "7d", "30d", "90d", "1y", "5y",
+];
 export const DEFAULT_PRICE_HISTORY_LOOKBACKS_BY_INTERVAL: Readonly<Partial<Record<PriceHistoryInterval, PriceHistoryLookback>>> = {
   "1m": "4h",
   "5m": "1d",
   "15m": "1d",
   "1h": "7d",
   "4h": "30d",
-  "1d": "30d",
+  "1d": "1y",
+  "1w": "5y",
+  "1mo": "5y",
 };
-export const DEFAULT_PRICE_HISTORY_MAX_CANDLES = 300;
+export const DEFAULT_PRICE_HISTORY_MAX_CANDLES = 2_000;
 
 export const PRICE_HISTORY_LOOKBACK_MS: Record<PriceHistoryLookback, number> = {
   "1h": 60 * 60_000,
@@ -36,6 +42,19 @@ export const PRICE_HISTORY_LOOKBACK_MS: Record<PriceHistoryLookback, number> = {
   "1d": 24 * 60 * 60_000,
   "7d": 7 * 24 * 60 * 60_000,
   "30d": 30 * 24 * 60 * 60_000,
+  "90d": 90 * 24 * 60 * 60_000,
+  "1y": 365 * 24 * 60 * 60_000,
+  "5y": 5 * 365 * 24 * 60 * 60_000,
+};
+
+export const floorTimestampToInterval = (timestampMs: number, interval: PriceHistoryInterval): number => {
+  const date = new Date(timestampMs);
+  if (interval === "1mo") return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+  if (interval === "1w") {
+    const dayOffset = (date.getUTCDay() + 6) % 7;
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - dayOffset);
+  }
+  return Math.floor(timestampMs / PRICE_HISTORY_INTERVAL_MS[interval]) * PRICE_HISTORY_INTERVAL_MS[interval];
 };
 
 const parseDateTime = (value: string, field: "asOf" | "startTime" | "endTime"): number => {
@@ -136,7 +155,6 @@ export const resampleCandles = (candles: CandleData[], interval: PriceHistoryInt
     return candles;
   }
 
-  const bucketMs = PRICE_HISTORY_INTERVAL_MS[interval];
   const buckets = new Map<number, CandleData>();
   const sorted = [...candles].sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp));
 
@@ -146,7 +164,7 @@ export const resampleCandles = (candles: CandleData[], interval: PriceHistoryInt
       continue;
     }
 
-    const bucketStart = Math.floor(timestampMs / bucketMs) * bucketMs;
+    const bucketStart = floorTimestampToInterval(timestampMs, interval);
     const current = buckets.get(bucketStart);
     if (!current) {
       buckets.set(bucketStart, { ...candle, timestamp: new Date(bucketStart).toISOString() });
