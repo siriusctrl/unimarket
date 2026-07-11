@@ -318,6 +318,199 @@ export const timelineFixture = {
   ],
 };
 
+const muCandles = Array.from({ length: 120 }, (_, index) => {
+  const timestamp = new Date(Date.UTC(2026, 2, 14 + index)).toISOString();
+  const trend = 520 + index * 3.65;
+  const cycle = Math.sin(index / 7) * 24 + Math.sin(index / 19) * 13;
+  const open = Number((trend + cycle).toFixed(2));
+  const close = Number((open + Math.sin(index * 1.7) * 11).toFixed(2));
+  return {
+    timestamp,
+    open,
+    high: Number((Math.max(open, close) + 8 + (index % 5)).toFixed(2)),
+    low: Number((Math.min(open, close) - 7 - (index % 4)).toFixed(2)),
+    close,
+    volume: Number((4_800 + index * 51 + Math.abs(Math.sin(index / 4)) * 3_600).toFixed(3)),
+  };
+});
+
+const movingAverage = (period) => muCandles.map((candle, index) => ({
+  timestamp: candle.timestamp,
+  values: {
+    value: index + 1 < period
+      ? null
+      : Number((muCandles.slice(index - period + 1, index + 1).reduce((sum, row) => sum + row.close, 0) / period).toFixed(4)),
+  },
+}));
+
+export const analysisContextFixture = {
+  schema: "unimarket.chart-context/v1",
+  instrument: { market: "hyperliquid", reference: "xyz:MU", displayName: "MU perpetual on XYZ" },
+  data: {
+    interval: "1d",
+    range: {
+      mode: "lookback",
+      lookback: "1y",
+      asOf: muCandles.at(-1).timestamp,
+      startTime: muCandles[0].timestamp,
+      endTime: muCandles.at(-1).timestamp,
+    },
+    snapshotHash: `sha256:${"b".repeat(64)}`,
+    candles: muCandles,
+    summary: {
+      open: muCandles[0].open,
+      close: muCandles.at(-1).close,
+      change: Number((muCandles.at(-1).close - muCandles[0].open).toFixed(2)),
+      changePct: Number((((muCandles.at(-1).close - muCandles[0].open) / muCandles[0].open) * 100).toFixed(2)),
+      high: Math.max(...muCandles.map((candle) => candle.high)),
+      low: Math.min(...muCandles.map((candle) => candle.low)),
+      volume: muCandles.reduce((sum, candle) => sum + candle.volume, 0),
+      candleCount: muCandles.length,
+    },
+  },
+  indicators: [
+    { id: "sma-20", type: "sma", pane: "price", points: movingAverage(20) },
+    { id: "ema-50", type: "ema", pane: "price", points: movingAverage(50) },
+    {
+      id: "rsi-14",
+      type: "rsi",
+      pane: "oscillator",
+      points: muCandles.map((candle, index) => ({
+        timestamp: candle.timestamp,
+        values: { rsi: index < 14 ? null : Number((54 + Math.sin(index / 6) * 16).toFixed(3)) },
+      })),
+    },
+    {
+      id: "volume-profile",
+      type: "volumeProfile",
+      pane: "volumeProfile",
+      points: [],
+      profile: {
+        method: "ohlcv-range-approximation",
+        sourceGranularity: "1d",
+        pointOfControl: 742.5,
+        valueAreaLow: 665,
+        valueAreaHigh: 852,
+        bins: Array.from({ length: 24 }, (_, index) => ({
+          low: 480 + index * 24,
+          high: 504 + index * 24,
+          volume: 10_000 + Math.sin(index / 3) * 4_000 + index * 350,
+          inValueArea: index >= 6 && index <= 17,
+        })),
+      },
+    },
+  ],
+  dataQuality: { candleCount: muCandles.length, missingIntervals: 0, volumeAvailable: true, source: "market-adapter" },
+  drawingCapabilities: ["horizontalLine", "verticalLine", "trendLine", "ray", "channel", "rectangle", "marker", "text"],
+};
+
+const analysisDocument = {
+  schema: "unimarket.chart-analysis/v1",
+  title: "MU daily trend structure",
+  instrument: { market: "hyperliquid", reference: "xyz:MU", displayName: "MU perpetual on XYZ" },
+  data: {
+    interval: "1d",
+    from: muCandles[0].timestamp,
+    to: muCandles.at(-1).timestamp,
+    asOf: muCandles.at(-1).timestamp,
+    snapshotHash: analysisContextFixture.data.snapshotHash,
+  },
+  viewport: { priceScale: "auto" },
+  thesis: "MU remains inside an ascending daily channel while repeated closes hold above the medium-term support slope.",
+  invalidation: "A daily close below 795 and outside the lower channel boundary invalidates the constructive structure.",
+  layers: [
+    {
+      id: "primary-support",
+      type: "trendLine",
+      anchors: [
+        { time: muCandles[12].timestamp, price: muCandles[12].low },
+        { time: muCandles[78].timestamp, price: muCandles[78].low },
+      ],
+      extend: { left: false, right: true },
+      label: "Rising support",
+      rationale: "Connects the March and May reaction lows without crossing the dominant candle bodies.",
+      confidence: 0.78,
+      visible: true,
+      style: { color: "support", width: 2, lineStyle: "solid", opacity: 0.92 },
+    },
+    {
+      id: "ascending-channel",
+      type: "channel",
+      base: [
+        { time: muCandles[18].timestamp, price: muCandles[18].low },
+        { time: muCandles[82].timestamp, price: muCandles[82].low },
+      ],
+      parallelAnchor: { time: muCandles[22].timestamp, price: muCandles[22].high + 92 },
+      fillOpacity: 0.06,
+      label: "Daily channel",
+      rationale: "Parallel envelope contains the majority of daily closes across the selected range.",
+      confidence: 0.69,
+      visible: true,
+      style: { color: "accent", width: 1, lineStyle: "dashed", opacity: 0.74 },
+    },
+    {
+      id: "resistance-980",
+      type: "horizontalLine",
+      price: 980,
+      label: "980 resistance",
+      rationale: "Recent expansion stalled below this round-number supply area.",
+      confidence: 0.65,
+      visible: true,
+      style: { color: "resistance", width: 2, lineStyle: "dotted", opacity: 0.86 },
+    },
+    {
+      id: "earnings-window",
+      type: "verticalLine",
+      time: muCandles[101].timestamp,
+      label: "Catalyst window",
+      rationale: "Separates the latest volatility regime from the prior trend segment.",
+      confidence: 0.58,
+      visible: true,
+      style: { color: "muted", width: 1, lineStyle: "dashed", opacity: 0.7 },
+    },
+    { id: "sma-20", type: "sma", period: 20, visible: true },
+    { id: "ema-50", type: "ema", period: 50, visible: true },
+    { id: "rsi-14", type: "rsi", period: 14, visible: true },
+  ],
+  metadata: {
+    createdBy: { kind: "agent", actorId: "agent-atlas" },
+    runId: "fixture-mu-structure-v1",
+    createdAt: muCandles.at(-1).timestamp,
+  },
+};
+
+export const analysisDocumentsFixture = {
+  documents: [{
+    id: "ana-mu-draft",
+    supersedesId: "ana-mu-proof",
+    version: 2,
+    status: "draft",
+    document: {
+      ...analysisDocument,
+      title: "MU supply revision",
+      thesis: "Draft revision isolates the current supply boundary before publication.",
+      layers: [analysisDocument.layers[2]],
+      metadata: { ...analysisDocument.metadata, runId: "fixture-mu-draft-v2" },
+    },
+    createdBy: "agent-atlas",
+    reasoning: "Draft awaits browser review.",
+    createdAt: muCandles.at(-1).timestamp,
+    updatedAt: muCandles.at(-1).timestamp,
+    publishedAt: null,
+  }, {
+    id: "ana-mu-proof",
+    supersedesId: null,
+    version: 1,
+    status: "published",
+    document: analysisDocument,
+    createdBy: "agent-atlas",
+    reasoning: "Visual verification confirmed the channel and support projection.",
+    createdAt: muCandles.at(-1).timestamp,
+    updatedAt: muCandles.at(-1).timestamp,
+    publishedAt: muCandles.at(-1).timestamp,
+  }],
+};
+
 export async function mockDashboardApi(page, calls = []) {
   await page.route("**/api/dashboard/**", async (route) => {
     const url = new URL(route.request().url());
@@ -341,6 +534,33 @@ export async function mockDashboardApi(page, calls = []) {
     await route.fulfill({
       status: 404,
       json: { error: { code: "NOT_FOUND", message: `No browser fixture for ${url.pathname}` } },
+    });
+  });
+
+  await page.route("**/api/analysis/**", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(`${url.pathname}${url.search}`);
+
+    if (url.pathname === "/api/analysis/context") {
+      await route.fulfill({ json: analysisContextFixture });
+      return;
+    }
+    if (url.pathname === "/api/analysis/documents") {
+      await route.fulfill({ json: analysisDocumentsFixture });
+      return;
+    }
+    const documentMatch = url.pathname.match(/^\/api\/analysis\/documents\/([^/]+)$/);
+    if (documentMatch) {
+      const document = analysisDocumentsFixture.documents.find((candidate) => candidate.id === documentMatch[1]);
+      await route.fulfill(document
+        ? { json: document }
+        : { status: 404, json: { error: { code: "ANALYSIS_NOT_FOUND", message: "Analysis not found" } } });
+      return;
+    }
+
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: "NOT_FOUND", message: `No analysis fixture for ${url.pathname}` } },
     });
   });
 }

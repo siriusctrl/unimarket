@@ -267,11 +267,19 @@ Use a repeatable sequence:
 7. `GET /api/markets/:market/quotes`
 8. `GET /api/markets/:market/orderbooks`
 9. optional `GET /api/markets/:market/price-history?reference=...&interval=...&lookback=...`
-10. optional `funding` and `resolve` reads when the market supports them
-11. account, portfolio, positions, and order reads
-12. optional `memory.md` lookup for relevant live candidates or theses
-13. decision and journal write
-14. update `watchlist.md` and sleep hint
+10. optional `GET /api/analysis/context` when the agent needs deterministic indicators or intends to publish chart structure
+11. optional draft -> browser/image review -> publish analysis-document flow
+12. optional `funding` and `resolve` reads when the market supports them
+13. account, portfolio, positions, and order reads
+14. optional `memory.md` lookup for relevant live candidates or theses
+15. decision and journal write
+16. update `watchlist.md` and sleep hint
+
+### Provider-neutral chart analysis
+
+Use `analysis-context` to obtain candles, indicator output, drawing capabilities, and the exact snapshot hash. Write a `unimarket.chart-analysis/v1` JSON file using time-price coordinates, run `analysis-validate`, then use `analysis-create`. Inspect that exact draft at `/analysis/:market/:reference?documentId=<draft-id>` directly or through `pnpm render:analysis`; call `analysis-publish` only after visual review.
+
+The platform stores the document format and authenticated actor identity, not an AI provider. Never emit arbitrary JavaScript, CSS, canvas pixels, or unlabelled volume-at-price claims. `volumeProfile` is an OHLCV range approximation unless a future adapter provides finer trade data.
 
 ## What the Agent Should Know About the Platform
 

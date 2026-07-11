@@ -7,6 +7,8 @@ pnpm test
 pnpm coverage
 pnpm verify:ui
 pnpm verify:preview
+pnpm verify:proof
+pnpm verify:analysis-live
 ```
 
 Package-focused validation is often faster while iterating:
@@ -26,11 +28,12 @@ The repository follows a few testing layers.
 - API contract tests: status codes, payloads, auth boundaries, and persistence side effects
 - Integration workers: reconciliation, settlement, funding, and liquidation flows
 - Browser smoke: deterministic dashboard rendering, navigation, filters, theme, and responsive shell
+- Analysis protocol: schema semantics, deterministic indicators, snapshot validation, immutable publishing, drawing projection, and provider-neutral provenance
 
 ## Dashboard Browser Verification
 
-The dashboard browser layer is intentionally separate from API E2E. Playwright
-intercepts only `/api/dashboard/*` requests and returns the shared fixture in
+The browser layer is intentionally separate from API E2E. Playwright intercepts
+`/api/dashboard/*` and `/api/analysis/*` requests and returns the shared fixture in
 `tests/browser/fixtures/dashboard.mjs`. This keeps UI proof deterministic and
 prevents live Polymarket/Hyperliquid availability or local database contents
 from changing the rendered result.
@@ -57,6 +60,7 @@ The suite covers:
 - light/dark theme switching;
 - mobile navigation and page-level overflow;
 - uncaught browser and console errors.
+- MU candlesticks, price indicators, oscillator pane, volume profile, and model-authored drawings.
 
 Run the production bundle smoke separately:
 
@@ -66,6 +70,19 @@ pnpm verify:preview
 
 This builds `@unimarket/web`, serves the Vite preview, and proves that the main
 dashboard-to-agent-detail path still works from production assets.
+It also verifies that production assets render the MU analysis document and its profile bins.
+
+## Live MU Analysis Verification
+
+Run the opt-in network check when changing chart context, Hyperliquid history, analysis persistence, or rendering:
+
+```bash
+pnpm verify:analysis-live
+```
+
+The script starts isolated API and Vite processes, fetches live `xyz:MU` daily candles from Hyperliquid, creates and publishes a model-neutral analysis document, opens the page in Chromium, asserts generated drawings plus volume-profile bins, and writes JSON/screenshot evidence under `artifacts/analysis/<timestamp>/`.
+
+This is not a deterministic CI dependency. The normal browser suite uses a fixed MU fixture; the live command proves the external adapter boundary on demand.
 
 For a user-facing visual change, also run:
 

@@ -61,6 +61,8 @@ unimarket/
 │   │       ├── perp.ts        # Perp fill, margin, liquidation math
 │   │       ├── schemas.ts     # Shared Zod schemas
 │   │       └── index.ts
+│   ├── analysis/
+│   │   └── src/             # Provider-neutral chart protocol + deterministic indicators
 │   ├── markets/
 │   │   └── src/
 │   │       ├── types.ts       # MarketAdapter contract
@@ -120,6 +122,12 @@ Adapters expose a common interface so the rest of the system can ask for:
 
 Adapters do not execute trades. They are data providers for the simulation engine.
 
+### `packages/analysis`
+
+The `analysis` package owns the versioned `unimarket.chart-analysis/v1` document contract, deterministic indicators, drawing metadata, and OHLCV-based volume-profile approximation. It has no model-provider integration and executes no arbitrary code.
+
+Drawings use time-price coordinates. Indicator layers store calculation parameters rather than generated point arrays, so the API and web renderer can reproduce them from the same candle snapshot.
+
 ### `packages/api`
 
 The `api` package wires everything together.
@@ -134,6 +142,7 @@ It handles:
 - worker scheduling
 - SSE event emission
 - timeline aggregation
+- chart-context construction, snapshot-hash verification, and analysis-document persistence
 
 Within `packages/api/src`, the subdirectories are organized by runtime role:
 - `routes/` defines HTTP boundaries and permission checks
@@ -154,6 +163,22 @@ It is intentionally thin:
 - keeps visible workflows focused on observation, exposure review, and audit timelines
 - leaves order placement to agent/user APIs instead of dashboard order tickets or admin proxy orders
 - does not reimplement trading logic in the browser
+
+The `/analysis/:market/:reference` route is a separate research surface. It can render analysis artifacts, but it cannot place trades or mutate accounts. Published analysis revisions are immutable and remain distinct from the read-only operator dashboard.
+
+## Chart Analysis Architecture
+
+```text
+MarketAdapter.getPriceHistory
+  -> chart context + sha256 candle snapshot
+  -> model-neutral analysis JSON
+  -> schema and snapshot validation
+  -> draft/published persistence
+  -> Lightweight Charts + time-price SVG projection
+  -> Playwright screenshot and render metadata
+```
+
+The renderer is tested at build time with deterministic fixtures. Individual model documents are data, not code, so they do not require rebuilding Playwright or the frontend. A model can open the deployed analysis URL or run `pnpm render:analysis` for visual inspection.
 
 ## Market Capability Model
 

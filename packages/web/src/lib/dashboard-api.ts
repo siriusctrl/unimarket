@@ -166,7 +166,7 @@ const parseErrorPayload = async (response: Response): Promise<{ message: string;
   }
 };
 
-const requestJson = async <TResponse>(
+export const requestJson = async <TResponse>(
   path: string,
   {
     init,

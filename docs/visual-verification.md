@@ -13,7 +13,7 @@ pnpm verify:proof
 
 The command starts the Vite dashboard, injects the same deterministic API data
 used by the Playwright smoke suite, drives a fixed operator-review flow in
-Chromium, and writes:
+Chromium, continues into the MU Analysis Workspace, and writes:
 
 - `proof.gif`: quick end-to-end review;
 - `recording.webm`: original Playwright recording;
@@ -42,6 +42,18 @@ Check for:
 - timeline filters hiding the wrong event types;
 - unexpected horizontal page overflow;
 - fallback/error UI appearing with the deterministic fixture.
+- drawings present in the DOM but hidden under the financial-chart canvas;
+- trend/channel anchors projecting outside the visible market range;
+- missing or mislabeled approximate volume-profile bins.
+
+For a single deployed analysis URL, including an exact draft revision, run:
+
+```bash
+pnpm render:analysis http://host/analysis/hyperliquid/xyz%3AMU artifacts/analysis/mu.png
+pnpm render:analysis 'http://host/analysis/hyperliquid/xyz%3AMU?documentId=ana_example' artifacts/analysis/mu-draft.png
+```
+
+This captures the actual chart container without rebuilding the application and writes adjacent render metadata containing the candle hash, annotation count, rendered drawing IDs, and browser errors.
 
 Report the absolute verification directory in the final handoff.
 

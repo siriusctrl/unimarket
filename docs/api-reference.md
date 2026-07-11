@@ -116,6 +116,34 @@ Rules:
 | `GET` | `/api/markets/:market/price-history` | key or admin | Get historical candles, resolved range, and summary metrics |
 | `GET` | `/api/markets/:market/resolve` | key or admin | Get settlement or resolution status |
 
+## Chart Analysis
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/api/analysis/schema` | public | Discover protocol, drawing, and indicator capabilities |
+| `GET` | `/api/analysis/context` | public | Fetch candles, snapshot hash, deterministic indicators, and data-quality metadata |
+| `POST` | `/api/analysis/validate` | key or admin | Validate and normalize a chart-analysis document without persistence |
+| `GET` | `/api/analysis/documents` | public | List stored documents with optional `market`, `reference`, and `status` filters |
+| `POST` | `/api/analysis/documents` | key or admin | Create a draft after validating its candle snapshot |
+| `GET` | `/api/analysis/documents/:id` | public | Read one stored revision |
+| `PUT` | `/api/analysis/documents/:id` | owning key or admin | Replace a draft; published revisions are immutable |
+| `POST` | `/api/analysis/documents/:id/publish` | owning key or admin | Publish a draft with reasoning |
+| `GET` | `/api/analysis/documents/:id/render-metadata` | public | Inspect drawing anchors and clipping against the declared viewport |
+
+Context example:
+
+```http
+GET /api/analysis/context?market=hyperliquid&reference=xyz:MU&interval=1d&lookback=1y
+```
+
+The `unimarket.chart-context/v1` response includes canonical candles, a `sha256:` snapshot hash, market summary, deterministic indicator output, data quality, and supported drawing primitives. `/api/analysis/schema` exposes required document fields plus the coordinate and parameter contract for every layer type.
+
+Document writes use `unimarket.chart-analysis/v1`. Supported drawings are `horizontalLine`, `verticalLine`, `trendLine`, `ray`, `channel`, `rectangle`, `marker`, and `text`. Supported indicators are `sma`, `ema`, `rsi`, `atr`, `macd`, `bollingerBands`, and explicitly labeled `volumeProfile` with `ohlcv-range-approximation`.
+
+Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`. The API replaces `metadata.createdBy.actorId` with the authenticated identity. It rejects mismatched candle hashes with `409 SNAPSHOT_MISMATCH`, instrument changes on a draft, and every update to a published document.
+
+Analysis reads, including drafts, are intentionally public so a deployed renderer can preview an exact `documentId` before publication. Do not place credentials or private research in an analysis document.
+
 ### Search and browse contract
 
 - `search` requires a non-empty `q`

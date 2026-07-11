@@ -139,10 +139,17 @@ try {
 
   await page.getByRole("button", { name: "Back to overview" }).click();
   await page.getByRole("heading", { name: "Agent observation console" }).waitFor();
+  await page.getByRole("link", { name: "Analysis" }).click();
+  await page.getByRole("heading", { name: "Market structure, stored as data" }).waitFor();
+  const analysisChart = page.locator("[data-analysis-ready='true']");
+  await analysisChart.waitFor();
+  await page.getByRole("button", { name: "90d" }).click();
+  await page.waitForTimeout(600);
+  await page.getByRole("button", { name: "1y" }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => window.scrollY === 0);
   await page.waitForTimeout(900);
-  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "disabled" });
+  await page.screenshot({ path: screenshotPath, fullPage: true, animations: "allow" });
 
   await context.close();
   await browser.close();
@@ -202,6 +209,9 @@ try {
     "toggle dark mode",
     "filter audit timeline to orders",
     "return to dashboard",
+    "open the MU analysis workspace",
+    "inspect model-authored time-price drawings and volume profile",
+    "change and restore the analysis range",
     "capture full-page screenshot",
   ];
   const manifest = {

@@ -25,9 +25,10 @@ Authentication:
    - `GET /api/markets/{market}/trading-constraints?reference=...`
    - `GET /api/markets/{market}/quote?reference=...`
    - optional `orderbook`, `price-history`, `funding`, `resolve`
-6. Prefer helper workflow commands such as `snapshot`, `orders-open`, `history-summary`, and `scan` for deterministic endpoint work.
-7. Place or cancel orders with non-empty `reasoning`; attach `prediction` when making a forecast-backed order.
-8. Audit with `orders`, `positions`, `portfolio`, `timeline`, `journal`, and `events`.
+6. Use `analysis-context` and the versioned analysis-document commands when a thesis needs reproducible indicators or chart drawings.
+7. Prefer helper workflow commands such as `snapshot`, `orders-open`, `history-summary`, and `scan` for deterministic endpoint work.
+8. Place or cancel orders with non-empty `reasoning`; attach `prediction` when making a forecast-backed order.
+9. Audit with `orders`, `positions`, `portfolio`, `timeline`, `journal`, and `events`.
 
 ## Operating Rules
 
@@ -87,12 +88,14 @@ Preferred workflow commands:
 - `orders-open [limit] [offset]` for duplicate-order prevention without guessing query params
 - `history-summary <market> <reference> [interval] [lookback] [as_of]` for summary + last candles without full-history plumbing
 - `scan <market> <references_csv> [interval] [lookback] [as_of]` for batch inspection of supplied references with constraints, quotes, orderbook summaries, optional funding, and optional history summaries
+- `analysis-context <market> <reference> [interval] [lookback] [as_of]` for candles, deterministic indicators, snapshot hash, and drawing capabilities
+- `analysis-validate`, `analysis-create`, `analysis-update`, `analysis-publish`, and `analysis-render-metadata` for provider-neutral chart documents
 - `order-json <payload_json> [idempotency_key]` for forecast-backed orders that include a `prediction` object
 
 Core commands still available:
 - `register`, `markets`, `browse`, `search`
 - `constraints`, `quote`, `quotes`, `orderbook`, `orderbooks`, `funding`, `fundings`, `resolve`
-- `history`, `history-range`
+- `history`, `history-range`, `analysis-schema`, `analysis-list`
 - `buy`, `sell`, `order-json`, `cancel`, `orders`, `orders-history`, `orders-status`
 - `account`, `portfolio`, `positions`, `timeline`, `journal-add`, `journal-list`, `events`
 

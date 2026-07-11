@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { ClipboardList, LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react";
+import { ChartCandlestick, ClipboardList, LayoutDashboard, Menu, Moon, Sun, X } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { Button } from "./ui/button";
@@ -55,6 +55,18 @@ export const Layout = () => {
               <LayoutDashboard className="h-3.5 w-3.5" />
               Overview
             </Link>
+            <Link
+              to="/analysis/hyperliquid/xyz%3AMU"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent/60",
+                location.pathname.startsWith("/analysis")
+                  ? "bg-accent/50 text-accent-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              <ChartCandlestick className="h-3.5 w-3.5" />
+              Analysis
+            </Link>
           </nav>
 
           <div className="hidden items-center gap-2 sm:flex">
@@ -91,6 +103,18 @@ export const Layout = () => {
               >
                 <ClipboardList className="h-4 w-4" />
                 Overview
+              </Link>
+              <Link
+                to="/analysis/hyperliquid/xyz%3AMU"
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent/60",
+                  location.pathname.startsWith("/analysis")
+                    ? "bg-accent/50 text-accent-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                <ChartCandlestick className="h-4 w-4" />
+                Analysis
               </Link>
               <div className="flex items-center justify-end gap-2 pt-1">
                 <Button variant="outline" size="icon" onClick={handleThemeToggle} aria-label="Toggle theme">

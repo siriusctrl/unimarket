@@ -11,6 +11,7 @@ export default defineConfig({
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           "vendor-charts": ["recharts"],
+          "vendor-financial-chart": ["lightweight-charts"],
           "vendor-table": ["@tanstack/react-table"],
           "vendor-ui": [
             "@radix-ui/react-slot",
@@ -31,9 +32,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:3100",
-      "/health": "http://localhost:3100",
-      "/openapi.json": "http://localhost:3100",
+      "/api": process.env.UNIMARKET_API_PROXY ?? "http://localhost:3100",
+      "/health": process.env.UNIMARKET_API_PROXY ?? "http://localhost:3100",
+      "/openapi.json": process.env.UNIMARKET_API_PROXY ?? "http://localhost:3100",
     },
   },
 });

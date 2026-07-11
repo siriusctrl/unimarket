@@ -154,6 +154,12 @@ json_post() {
   emit_json "$(request_json POST "$path" "$payload" "$idem_key")"
 }
 
+json_put() {
+  local path="${1:?path required}"
+  local payload="${2:?payload required}"
+  emit_json "$(request_json PUT "$path" "$payload")"
+}
+
 json_delete() {
   local path="${1:?path required}"
   local payload="${2:?payload required}"
@@ -265,6 +271,16 @@ Core commands:
   history <market> <reference> [interval] [lookback] [as_of]
   history-summary <market> <reference> [interval] [lookback] [as_of]
   history-range <market> <reference> <interval> <start_time> <end_time>
+
+Analysis document commands:
+  analysis-schema
+  analysis-context <market> <reference> [interval] [lookback] [as_of]
+  analysis-list [market] [reference] [status]
+  analysis-validate <document_json_file>
+  analysis-create <document_json_file> <reasoning> [supersedes_id]
+  analysis-update <analysis_id> <document_json_file> <reasoning>
+  analysis-publish <analysis_id> <reasoning>
+  analysis-render-metadata <analysis_id>
 
 Trading and audit commands:
   buy <market> <reference> <quantity> <reasoning> [limit_price] [idempotency_key]
@@ -509,6 +525,66 @@ ENV
     start_time="${4:?start_time required}"
     end_time="${5:?end_time required}"
     json_get "/markets/${market}/price-history?reference=$(encode "$reference")&interval=$(encode "$interval")&startTime=$(encode "$start_time")&endTime=$(encode "$end_time")"
+    ;;
+  analysis-schema)
+    json_get "/analysis/schema"
+    ;;
+  analysis-context)
+    market="${1:?market required}"
+    reference="${2:?reference required}"
+    interval="${3:-1d}"
+    lookback="${4:-1y}"
+    as_of="${5:-}"
+    json_get "/analysis/context?market=$(encode "$market")&reference=$(encode "$reference")&interval=$(encode "$interval")&lookback=$(encode "$lookback")${as_of:+&asOf=$(encode "$as_of")}"
+    ;;
+  analysis-list)
+    market="${1:-}"
+    reference="${2:-}"
+    status="${3:-}"
+    query="limit=20"
+    [[ -n "$market" ]] && query="${query}&market=$(encode "$market")"
+    [[ -n "$reference" ]] && query="${query}&reference=$(encode "$reference")"
+    [[ -n "$status" ]] && query="${query}&status=$(encode "$status")"
+    json_get "/analysis/documents?${query}"
+    ;;
+  analysis-validate)
+    document_file="${1:?document json file required}"
+    [[ -f "$document_file" ]] || die "analysis document not found: $document_file"
+    document_json="$(jq -c . "$document_file")"
+    payload="$(jq -nc --argjson document "$document_json" '{document:$document}')"
+    json_post "/analysis/validate" "$payload"
+    ;;
+  analysis-create)
+    document_file="${1:?document json file required}"
+    reasoning="${2:?reasoning required}"
+    supersedes_id="${3:-}"
+    [[ -f "$document_file" ]] || die "analysis document not found: $document_file"
+    document_json="$(jq -c . "$document_file")"
+    payload="$(jq -nc \
+      --argjson document "$document_json" \
+      --arg reasoning "$reasoning" \
+      --arg supersedesId "$supersedes_id" \
+      '{document:$document,reasoning:$reasoning} + (if $supersedesId == "" then {} else {supersedesId:$supersedesId} end)')"
+    json_post "/analysis/documents" "$payload"
+    ;;
+  analysis-update)
+    analysis_id="${1:?analysis id required}"
+    document_file="${2:?document json file required}"
+    reasoning="${3:?reasoning required}"
+    [[ -f "$document_file" ]] || die "analysis document not found: $document_file"
+    document_json="$(jq -c . "$document_file")"
+    payload="$(jq -nc --argjson document "$document_json" --arg reasoning "$reasoning" '{document:$document,reasoning:$reasoning}')"
+    json_put "/analysis/documents/${analysis_id}" "$payload"
+    ;;
+  analysis-publish)
+    analysis_id="${1:?analysis id required}"
+    reasoning="${2:?reasoning required}"
+    payload="$(jq -nc --arg reasoning "$reasoning" '{reasoning:$reasoning}')"
+    json_post "/analysis/documents/${analysis_id}/publish" "$payload"
+    ;;
+  analysis-render-metadata)
+    analysis_id="${1:?analysis id required}"
+    json_get "/analysis/documents/${analysis_id}/render-metadata"
     ;;
   buy|sell)
     market="${1:?market required}"

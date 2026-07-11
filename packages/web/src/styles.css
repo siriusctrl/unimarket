@@ -33,6 +33,7 @@
   --chart-6: 220 8% 34%;
   --chart-7: 2 36% 36%;
   --chart-8: 104 24% 34%;
+  --resistance: 14 42% 46%;
   --panel-shadow: 0 18px 34px -28px hsl(220 10% 12% / 0.26);
   --panel-shadow-strong: 0 22px 48px -30px hsl(220 12% 10% / 0.42);
   --radius: 0.5rem;
@@ -66,6 +67,7 @@
   --chart-6: 220 7% 66%;
   --chart-7: 2 40% 59%;
   --chart-8: 104 31% 60%;
+  --resistance: 14 48% 62%;
   --panel-shadow: 0 18px 42px -30px hsl(220 20% 2% / 0.84);
   --panel-shadow-strong: 0 24px 54px -30px hsl(220 24% 2% / 0.92);
 }
@@ -98,6 +100,7 @@
   --color-chart-6: hsl(var(--chart-6));
   --color-chart-7: hsl(var(--chart-7));
   --color-chart-8: hsl(var(--chart-8));
+  --color-resistance: hsl(var(--resistance));
   --font-sans: "Sora", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --radius-sm: calc(var(--radius) - 4px);

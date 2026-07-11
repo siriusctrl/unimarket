@@ -48,6 +48,18 @@ try {
   await page.getByRole("button", { name: "Atlas Alpha", exact: true }).click();
   await page.getByRole("heading", { name: "Audit timeline" }).waitFor();
 
+  await page.getByRole("link", { name: "Analysis" }).click();
+  const analysisChart = page.locator("[data-analysis-ready='true']");
+  await analysisChart.waitFor();
+  if (Number(await analysisChart.getAttribute("data-annotation-count")) !== 4) {
+    throw new Error("Production analysis preview did not render the MU drawing document");
+  }
+  const profileBins = analysisChart.locator("[data-profile-bin]");
+  await profileBins.first().waitFor();
+  if (await profileBins.count() !== 24) {
+    throw new Error("Production analysis preview did not render the volume profile");
+  }
+
   console.log(`Production preview verification passed: ${url}`);
 } finally {
   if (browser) await browser.close();

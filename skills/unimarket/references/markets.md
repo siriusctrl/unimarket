@@ -63,3 +63,7 @@
 3. Read `quote`, `orderbook`, and `funding`.
 4. Optionally read `price-history` when the caller needs candles.
 5. Validate `trading-constraints` before ordering.
+
+## Analysis Context
+
+Use `GET /api/analysis/context` after choosing a concrete market reference. The response is market-agnostic even when the upstream reference is adapter-specific. Hyperliquid `xyz:MU` is suitable for live stock-oracle chart validation, but it is a perpetual market reference rather than a direct Nasdaq spot-data contract.

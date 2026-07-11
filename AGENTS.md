@@ -8,6 +8,7 @@ durable architecture in `docs/architecture.md`.
 
 - `packages/core/`: deterministic trading engine, schemas, perps, and timeline
   primitives.
+- `packages/analysis/`: provider-neutral chart documents, indicators, and drawing metadata.
 - `packages/markets/`: market adapters, registry, cache, history, Hyperliquid,
   and Polymarket integration.
 - `packages/api/`: HTTP API, env, fees, timeline, symbol metadata, workers, and
@@ -44,6 +45,7 @@ durable architecture in `docs/architecture.md`.
 ## Task Routing
 
 - Trading engine, schemas, timeline primitives: inspect `packages/core/`.
+- Chart-analysis schema, indicators, and drawing metadata: inspect `packages/analysis/`.
 - Market adapter or data integration: inspect `packages/markets/`.
 - API route, worker, auth, fees, timeline, or persistence behavior: inspect
   `packages/api/`.
@@ -64,6 +66,7 @@ durable architecture in `docs/architecture.md`.
 - Run `corepack pnpm verify:preview` for production-build dashboard changes.
 - Run `corepack pnpm verify:proof` for user-facing visual changes, inspect the
   generated GIF/contact sheet, and report the absolute artifact path.
+- Run `corepack pnpm verify:analysis-live` when changing live chart context or financial-chart rendering and report the ignored MU artifact path.
 - For API contract changes, add or update focused package tests and check
   `docs/api-reference.md`.
 - For admin-boundary changes, verify user/admin separation explicitly.

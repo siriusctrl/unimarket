@@ -12,6 +12,7 @@ A self-hosted paper trading engine with a clean REST API. Simulated trading acro
 - **Decision transparency** — every action requires reasoning; journal + timeline for full audit trail
 - **Prediction benchmarks** — agents can attach probabilities to orders; resolved outcomes feed Brier-based leaderboards
 - **Constraint-aware orders** — decimal-capable quantities validated by per-market rules (`minQuantity`, `quantityStep`, integer/fractional support, `maxLeverage`)
+- **Model-neutral chart analysis** — versioned JSON documents describe indicators and time-price drawings without binding the platform to an AI provider
 
 ---
 
@@ -21,6 +22,7 @@ Unimarket is agent-run by default.
 
 - Agents discover markets, form predictions, and place paper orders through the API.
 - Humans use the dashboard as an operator review console for exposure, valuation health, PnL, and audit timelines.
+- Humans and agents use the separate Analysis Workspace for candles, deterministic indicators, and published chart-analysis documents.
 - Benchmarking separates agent-submitted probability snapshots from platform-computed scores such as Brier, edge, and time to resolution.
 - The dashboard should not reintroduce manual order tickets or human-first trading workflows.
 - The default web design should feel polished and grounded: neutral graphite surfaces, a moss/eucalyptus primary accent, and muted material chart colors. Avoid sci-fi cyan, AI purple/blue gradients, washed-out gray-green, and dirty yellow palettes.
@@ -173,6 +175,20 @@ Example response shape:
 }
 ```
 
+### Chart Analysis Documents
+
+The Analysis Workspace lives at `/analysis/:market/:reference`. Agents consume `GET /api/analysis/context`, then submit a provider-neutral `unimarket.chart-analysis/v1` JSON document. Drawings use market coordinates such as `{ time, price }`; the platform never stores generated JavaScript or canvas pixels. Drafts can be updated, while published revisions are immutable. Analysis reads are public for browser preview, so documents must not contain secrets.
+
+```bash
+GET  /api/analysis/schema
+GET  /api/analysis/context?market=hyperliquid&reference=xyz:MU&interval=1d&lookback=1y
+POST /api/analysis/documents
+POST /api/analysis/documents/:id/publish
+GET  /api/analysis/documents/:id/render-metadata
+```
+
+`pnpm render:analysis <url> [output.png]` lets a model inspect the real deployed renderer without rebuilding the app. Add `?documentId=<draft-id>` to preview the exact revision before publishing. `pnpm verify:analysis-live` performs an opt-in network validation against live Hyperliquid `xyz:MU` candles and writes ignored artifacts under `artifacts/analysis/`. MU here is an XYZ perpetual backed by stock-oracle data, not a direct Nasdaq spot feed.
+
 ### Running the Server
 
 ```bash
@@ -200,6 +216,7 @@ pnpm setup:browsers    # One-time Chromium install for browser verification
 pnpm verify:ui         # Deterministic Playwright dashboard smoke tests
 pnpm verify:preview    # Production-build browser smoke test
 pnpm verify:proof      # Record the final dashboard evidence bundle
+pnpm verify:analysis-live # Opt-in live MU context + document + browser verification
 ```
 
 Browser verification uses deterministic dashboard responses, so it does not

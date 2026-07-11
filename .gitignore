@@ -13,5 +13,6 @@ coverage
 .agent/
 .agents/
 artifacts/verification/
+artifacts/analysis/
 playwright-report/
 test-results/

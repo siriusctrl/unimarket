@@ -11,7 +11,9 @@
     "verify:ui": "playwright test",
     "verify:preview": "node scripts/verify-preview.mjs",
     "verify:proof": "node scripts/record-proof.mjs",
-    "coverage": "corepack pnpm --filter @unimarket/core test:coverage && corepack pnpm --filter @unimarket/markets test:coverage && corepack pnpm --filter @unimarket/api test:coverage",
+    "verify:analysis-live": "node scripts/verify-live-analysis.mjs",
+    "render:analysis": "node scripts/render-analysis.mjs",
+    "coverage": "corepack pnpm --filter @unimarket/analysis test:coverage && corepack pnpm --filter @unimarket/core test:coverage && corepack pnpm --filter @unimarket/markets test:coverage && corepack pnpm --filter @unimarket/api test:coverage",
     "test": "corepack pnpm -r test",
     "typecheck": "corepack pnpm -r typecheck"
   },

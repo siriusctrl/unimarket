@@ -202,6 +202,22 @@ Response fields:
 - `candles`
 - `summary` with `open`, `close`, `change`, `changePct`, `high`, `low`, `volume`, `candleCount`
 
+### Chart analysis
+
+```http
+GET /api/analysis/schema
+GET /api/analysis/context?market={market}&reference={reference}&interval=1d&lookback=1y
+GET /api/analysis/documents?market={market}&reference={reference}
+POST /api/analysis/documents
+PUT /api/analysis/documents/{id}
+POST /api/analysis/documents/{id}/publish
+GET /api/analysis/documents/{id}/render-metadata
+```
+
+Documents use `unimarket.chart-analysis/v1`. Drawings use time-price coordinates and indicator layers store deterministic calculation parameters. Create/update bodies wrap the document with non-empty `reasoning`; create may include `supersedesId`. Published revisions are immutable.
+
+After creating a draft, preview that exact revision at `/analysis/{market}/{reference}?documentId={id}` before publishing it.
+
 ## Order Writes
 
 ### Place order
