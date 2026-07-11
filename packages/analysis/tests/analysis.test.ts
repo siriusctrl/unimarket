@@ -160,8 +160,40 @@ describe("chart analysis protocol", () => {
       method: "ohlcv-range-approximation",
       visible: true,
     }], "1d")[0];
-    expect(flatProfile.profile?.bins).toHaveLength(8);
-    expect(flatProfile.profile?.pointOfControl).toBe(100.5);
+    expect(flatProfile.profile?.bins).toEqual([{
+      low: 100,
+      high: 100,
+      volume: flat.reduce((sum, candle) => sum + candle.volume, 0),
+      inValueArea: true,
+    }]);
+    expect(flatProfile.profile?.pointOfControl).toBe(100);
+
+    const flatRsi = computeIndicators(Array.from({ length: 20 }, (_, index) => ({
+      ...candles[index],
+      open: 100,
+      high: 100,
+      low: 100,
+      close: 100,
+      volume: 0,
+    })), [{ id: "flat-rsi", type: "rsi", period: 14, visible: true }], "1d")[0];
+    expect(flatRsi.points[14].values.rsi).toBe(50);
+
+    const zeroVolumeProfile = computeIndicators(candles.map((candle) => ({ ...candle, volume: 0 })), [{
+      id: "zero-volume",
+      type: "volumeProfile",
+      from: candles[0].timestamp,
+      to: candles.at(-1)!.timestamp,
+      bins: 8,
+      valueAreaPercent: 70,
+      method: "ohlcv-range-approximation",
+      visible: true,
+    }], "1d")[0];
+    expect(zeroVolumeProfile.profile).toMatchObject({
+      pointOfControl: null,
+      valueAreaLow: null,
+      valueAreaHigh: null,
+    });
+    expect(zeroVolumeProfile.profile?.bins.every((bin) => !bin.inValueArea)).toBe(true);
   });
 
   it("rejects unknown executable-looking fields and mismatched snapshot times", () => {
@@ -197,6 +229,43 @@ describe("chart analysis protocol", () => {
         to: candles[10].timestamp,
       },
     }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      layers: [{
+        id: "vertical-ray",
+        type: "ray",
+        anchors: [
+          { time: candles[10].timestamp, price: 100 },
+          { time: candles[10].timestamp, price: 110 },
+        ],
+        rationale: "Degenerate ray",
+      }],
+    }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      layers: [{
+        id: "flat-rectangle",
+        type: "rectangle",
+        anchors: [
+          { time: candles[10].timestamp, price: 100 },
+          { time: candles[20].timestamp, price: 100 },
+        ],
+        rationale: "Degenerate rectangle",
+      }],
+    }).success).toBe(false);
+    expect(chartAnalysisDocumentSchema.safeParse({
+      ...document,
+      layers: [{
+        id: "zero-width-channel",
+        type: "channel",
+        base: [
+          { time: candles[10].timestamp, price: 100 },
+          { time: candles[20].timestamp, price: 120 },
+        ],
+        parallelAnchor: { time: candles[15].timestamp, price: 110 },
+        rationale: "Degenerate channel",
+      }],
+    }).success).toBe(false);
   });
 
   it("reports drawings outside the declared viewport as clipped", () => {
@@ -205,7 +274,7 @@ describe("chart analysis protocol", () => {
       viewport: { from: candles[10].timestamp, to: candles.at(-1)!.timestamp, priceScale: "auto" },
     });
     expect(buildDrawingRenderMetadata(parsed)).toEqual([
-      expect.objectContaining({ id: "support", anchorsVisible: false, clipped: true }),
+      expect.objectContaining({ id: "support", anchorsInsideTimeViewport: false, timeClipped: true }),
     ]);
   });
 
@@ -230,6 +299,6 @@ describe("chart analysis protocol", () => {
     expect(metadata.find((entry) => entry.id === "v")?.anchors).toEqual([{ time: point.time, price: 0 }]);
     expect(metadata.find((entry) => entry.id === "channel")?.anchors).toHaveLength(3);
     expect(metadata.find((entry) => entry.id === "marker")?.anchors).toEqual([point]);
-    expect(metadata.every((entry) => entry.anchorsVisible)).toBe(true);
+    expect(metadata.every((entry) => entry.anchorsInsideTimeViewport)).toBe(true);
   });
 });

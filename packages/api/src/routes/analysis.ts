@@ -96,6 +96,7 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
         return jsonError(c, 400, "CAPABILITY_NOT_SUPPORTED", "priceHistory is not supported for this market");
       }
       let indicatorLayers: IndicatorLayer[] | undefined;
+      let documentSnapshot: { hash: string; startTime: string; endTime: string } | undefined;
       if (parsed.data.documentId) {
         const row = await db.select().from(chartAnalyses).where(eq(chartAnalyses.id, parsed.data.documentId)).get();
         if (!row) return jsonError(c, 404, "ANALYSIS_NOT_FOUND", "Analysis document not found");
@@ -109,9 +110,24 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
         indicatorLayers = stored.document.layers.filter(
           (layer): layer is IndicatorLayer => !("rationale" in layer),
         );
+        documentSnapshot = {
+          hash: stored.document.data.snapshotHash,
+          startTime: stored.document.data.from,
+          endTime: stored.document.data.to,
+        };
       }
       const { documentId: _documentId, ...contextOptions } = parsed.data;
-      return c.json(await buildChartContext({ registry, ...contextOptions, indicatorLayers }));
+      const context = await buildChartContext({
+        registry,
+        ...contextOptions,
+        startTime: documentSnapshot?.startTime,
+        endTime: documentSnapshot?.endTime,
+        indicatorLayers,
+      });
+      if (documentSnapshot && context.data.snapshotHash !== documentSnapshot.hash) {
+        return jsonError(c, 409, "SNAPSHOT_MISMATCH", "Stored analysis snapshot no longer matches the market adapter data");
+      }
+      return c.json(context);
     }),
   );
 
@@ -129,14 +145,13 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
     withErrorHandling(async (c) => {
       const parsed = parseQuery(c, listQuerySchema);
       if (!parsed.success) return parsed.response;
-      const rows = await db.select().from(chartAnalyses).orderBy(desc(chartAnalyses.createdAt)).all();
-      const documents = rows
-        .filter((row) => !parsed.data.market || row.market === parsed.data.market)
-        .filter((row) => !parsed.data.reference || row.reference === parsed.data.reference)
-        .filter((row) => !parsed.data.interval || row.interval === parsed.data.interval)
-        .filter((row) => !parsed.data.status || row.status === parsed.data.status)
-        .slice(0, parsed.data.limit)
-        .map(parseStoredChartAnalysis);
+      const rows = await db.select().from(chartAnalyses).where(and(
+        parsed.data.market ? eq(chartAnalyses.market, parsed.data.market) : undefined,
+        parsed.data.reference ? eq(chartAnalyses.reference, parsed.data.reference) : undefined,
+        parsed.data.interval ? eq(chartAnalyses.interval, parsed.data.interval) : undefined,
+        parsed.data.status ? eq(chartAnalyses.status, parsed.data.status) : undefined,
+      )).orderBy(desc(chartAnalyses.createdAt)).limit(parsed.data.limit).all();
+      const documents = rows.map(parseStoredChartAnalysis);
       return c.json({ documents });
     }),
   );
@@ -173,6 +188,9 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
         ) {
           return jsonError(c, 409, "INSTRUMENT_MISMATCH", "A revision must use the same instrument");
         }
+        if (previous.interval !== parsed.data.document.data.interval) {
+          return jsonError(c, 409, "INTERVAL_MISMATCH", "A revision must use the same candle interval");
+        }
         version = previous.version + 1;
       }
 
@@ -180,7 +198,8 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
         ...parsed.data.document,
         metadata: {
           ...parsed.data.document.metadata,
-          createdBy: { ...parsed.data.document.metadata.createdBy, actorId: userId },
+          createdBy: { kind: c.get("isAdmin") ? "system" as const : "agent" as const, actorId: userId },
+          createdAt,
         },
       };
       const row = {
@@ -232,27 +251,42 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
       ) {
         return jsonError(c, 409, "INSTRUMENT_MISMATCH", "Draft instrument cannot be changed");
       }
+      if (parsed.data.document.data.interval !== existing.interval) {
+        return jsonError(c, 409, "INTERVAL_MISMATCH", "Draft candle interval cannot be changed");
+      }
 
       const snapshot = await validateChartAnalysisSnapshot(registry, parsed.data.document);
       if (!snapshot.valid) {
         return jsonError(c, 409, "SNAPSHOT_MISMATCH", `Document candle snapshot does not match ${snapshot.expectedHash}`);
       }
 
+      const existingDocument = parseStoredChartAnalysis(existing).document;
       const document = {
         ...parsed.data.document,
         metadata: {
           ...parsed.data.document.metadata,
-          createdBy: { ...parsed.data.document.metadata.createdBy, actorId: existing.createdBy },
+          createdBy: existingDocument.metadata.createdBy,
+          createdAt: existingDocument.metadata.createdAt,
         },
       };
-      const updatedAt = nowIso();
-      await db.update(chartAnalyses).set({
+      const currentTime = nowIso();
+      const updatedAt = currentTime === existing.updatedAt
+        ? new Date(Date.parse(existing.updatedAt) + 1).toISOString()
+        : currentTime;
+      const updateResult = await db.update(chartAnalyses).set({
         interval: document.data.interval,
         snapshotHash: document.data.snapshotHash,
         document: JSON.stringify(document),
         reasoning: parsed.data.reasoning,
         updatedAt,
-      }).where(and(eq(chartAnalyses.id, id), eq(chartAnalyses.status, "draft"))).run();
+      }).where(and(
+        eq(chartAnalyses.id, id),
+        eq(chartAnalyses.status, "draft"),
+        eq(chartAnalyses.updatedAt, existing.updatedAt),
+      )).run();
+      if (updateResult.rowsAffected !== 1) {
+        return jsonError(c, 409, "ANALYSIS_CONFLICT", "Draft changed while the update was being applied");
+      }
       const updated = await db.select().from(chartAnalyses).where(eq(chartAnalyses.id, id)).get();
       if (!updated) throw new Error(`Updated chart analysis ${id} could not be loaded`);
       return c.json(parseStoredChartAnalysis(updated));
@@ -273,12 +307,19 @@ export const createAnalysisRoutes = (registry: MarketRegistry) => {
       }
 
       const publishedAt = nowIso();
-      await db.update(chartAnalyses).set({
+      const publishResult = await db.update(chartAnalyses).set({
         status: "published",
         reasoning: parsed.data.reasoning,
         updatedAt: publishedAt,
         publishedAt,
-      }).where(and(eq(chartAnalyses.id, id), eq(chartAnalyses.status, "draft"))).run();
+      }).where(and(
+        eq(chartAnalyses.id, id),
+        eq(chartAnalyses.status, "draft"),
+        eq(chartAnalyses.updatedAt, existing.updatedAt),
+      )).run();
+      if (publishResult.rowsAffected !== 1) {
+        return jsonError(c, 409, "ANALYSIS_CONFLICT", "Draft changed while it was being published");
+      }
       const published = await db.select().from(chartAnalyses).where(eq(chartAnalyses.id, id)).get();
       if (!published) throw new Error(`Published chart analysis ${id} could not be loaded`);
       return c.json(parseStoredChartAnalysis(published));

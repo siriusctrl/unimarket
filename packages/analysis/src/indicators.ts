@@ -86,7 +86,11 @@ const relativeStrengthIndex = (values: number[], period: number): Array<number |
   }
   let averageGain = gain / period;
   let averageLoss = loss / period;
-  const calculate = () => averageLoss === 0 ? 100 : 100 - (100 / (1 + averageGain / averageLoss));
+  const calculate = () => {
+    if (averageGain === 0 && averageLoss === 0) return 50;
+    if (averageLoss === 0) return 100;
+    return 100 - (100 / (1 + averageGain / averageLoss));
+  };
   output[period] = round(calculate());
 
   for (let index = period + 1; index < values.length; index += 1) {
@@ -155,7 +159,25 @@ const calculateVolumeProfile = (
 
   const min = Math.min(...selected.map((candle) => candle.low));
   const max = Math.max(...selected.map((candle) => candle.high));
-  const binSize = max === min ? 1 : (max - min) / layer.bins;
+  const totalSelectedVolume = selected.reduce((sum, candle) => sum + candle.volume, 0);
+  if (max === min) {
+    const hasVolume = totalSelectedVolume > 0;
+    return {
+      id: layer.id,
+      type: layer.type,
+      pane: "volumeProfile",
+      points: [],
+      profile: {
+        method: "ohlcv-range-approximation",
+        sourceGranularity: interval,
+        pointOfControl: hasVolume ? min : null,
+        valueAreaLow: hasVolume ? min : null,
+        valueAreaHigh: hasVolume ? min : null,
+        bins: [{ low: min, high: min, volume: round(totalSelectedVolume), inValueArea: hasVolume }],
+      },
+    };
+  }
+  const binSize = (max - min) / layer.bins;
   const volumes = Array(layer.bins).fill(0) as number[];
 
   selected.forEach((candle) => {
@@ -166,6 +188,27 @@ const calculateVolumeProfile = (
   });
 
   const totalVolume = volumes.reduce((sum, volume) => sum + volume, 0);
+  if (totalVolume === 0) {
+    return {
+      id: layer.id,
+      type: layer.type,
+      pane: "volumeProfile",
+      points: [],
+      profile: {
+        method: "ohlcv-range-approximation",
+        sourceGranularity: interval,
+        pointOfControl: null,
+        valueAreaLow: null,
+        valueAreaHigh: null,
+        bins: volumes.map((volume, index) => ({
+          low: round(min + index * binSize),
+          high: round(min + (index + 1) * binSize),
+          volume,
+          inValueArea: false,
+        })),
+      },
+    };
+  }
   const targetVolume = totalVolume * (layer.valueAreaPercent / 100);
   const pointOfControlIndex = volumes.reduce((best, volume, index) => volume > volumes[best] ? index : best, 0);
   const selectedBins = new Set([pointOfControlIndex]);

@@ -188,9 +188,11 @@ POST /api/analysis/documents/:id/publish
 GET  /api/analysis/documents/:id/render-metadata
 ```
 
-Run `pnpm dev:renderer` beside the deployed web app to start the reusable image service on port `3101`. A model can call `GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=<draft-id>` repeatedly while updating the same draft; Playwright stays warm between requests. `analysis-image-url` and `analysis-render` expose the same flow through the agent helper. `pnpm render:analysis <url> [output.png]` remains available as a one-off local fallback.
+Run `pnpm dev:renderer` beside the deployed web app to start the reusable image service on localhost port `3101`. A model can call `GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=<draft-id>` repeatedly while updating the same draft; Playwright stays warm between requests. `analysis-image-url`, `analysis-inspect`, and `analysis-render` expose image plus visibility/clipping metadata through the agent helper. Set `HOST` only when exposing the service behind a trusted gateway, and tune the bounded queue with `UNIMARKET_RENDER_CONCURRENCY`.
 
 The intended loop is `context → draft → image → visual critique → update → image → publish`. DOM counts and browser-error checks are only smoke tests; the model must actually inspect the returned image before claiming that a trend line or channel makes visual sense.
+
+When `documentId` is present, the API replays the document's exact `from`/`to` candle range and rejects any adapter data whose hash no longer matches the stored snapshot.
 
 `pnpm verify:analysis-live` performs an opt-in network validation against live Hyperliquid `xyz:MU` candles through the persistent renderer and writes ignored artifacts under `artifacts/analysis/`. MU here is an XYZ perpetual backed by stock-oracle data, not a direct Nasdaq spot feed.
 

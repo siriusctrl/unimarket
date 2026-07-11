@@ -132,7 +132,7 @@ Drawings use time-price coordinates. Indicator layers store calculation paramete
 
 ### `packages/renderer`
 
-The renderer is a provider-neutral, long-running Playwright service. It accepts structured `market`, `reference`, and `documentId` parameters, opens the configured Unimarket web deployment, waits for that exact draft to finish projecting, and returns `image/png` plus render metadata headers. The browser process stays warm across requests, so a model can inspect and revise many drafts without rebuilding the frontend or launching its own browser harness each turn.
+The renderer is a provider-neutral, long-running Playwright service. It accepts structured `market`, `reference`, and `documentId` parameters, opens the configured Unimarket web deployment, waits for that exact draft to finish projecting, and returns `image/png`; `/inspect` exposes full visibility and clipping metadata. The browser process stays warm across requests, relaunches after disconnect, binds to localhost by default, and applies bounded concurrency so a model can inspect many drafts without turning the renderer into an unbounded public browser pool.
 
 ### `packages/api`
 

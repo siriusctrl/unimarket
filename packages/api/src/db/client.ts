@@ -267,6 +267,7 @@ const migrationStatements = [
   `CREATE INDEX IF NOT EXISTS chart_analyses_instrument_idx ON chart_analyses(market, reference, created_at)`,
   `CREATE INDEX IF NOT EXISTS chart_analyses_status_idx ON chart_analyses(status)`,
   `CREATE INDEX IF NOT EXISTS chart_analyses_created_by_idx ON chart_analyses(created_by)`,
+  `CREATE INDEX IF NOT EXISTS chart_analyses_lookup_idx ON chart_analyses(market, reference, interval, status, created_at)`,
 ];
 
 const additiveMigrationStatements = [

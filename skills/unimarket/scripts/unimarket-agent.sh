@@ -284,6 +284,7 @@ Analysis document commands:
   analysis-publish <analysis_id> <reasoning>
   analysis-render-metadata <analysis_id>
   analysis-image-url <market> <reference> <analysis_id> [scope]
+  analysis-inspect <market> <reference> <analysis_id> [scope]
   analysis-render <market> <reference> <analysis_id> <output_png> [scope]
 
 Trading and audit commands:
@@ -609,6 +610,14 @@ ENV
     render_url="${RENDER_BASE_URL%/}/render?market=$(encode "$market")&reference=$(encode "$reference")&documentId=$(encode "$analysis_id")&scope=$(encode "$scope")"
     curl -fsS "$render_url" -o "$output_png"
     printf '%s\n' "$output_png"
+    ;;
+  analysis-inspect)
+    market="${1:?market required}"
+    reference="${2:?reference required}"
+    analysis_id="${3:?analysis id required}"
+    scope="${4:-chart}"
+    inspect_url="${RENDER_BASE_URL%/}/inspect?market=$(encode "$market")&reference=$(encode "$reference")&documentId=$(encode "$analysis_id")&scope=$(encode "$scope")"
+    emit_json "$(curl -fsS "$inspect_url")"
     ;;
   buy|sell)
     market="${1:?market required}"

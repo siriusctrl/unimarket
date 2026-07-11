@@ -81,7 +81,11 @@ const selectRecentSupport = (candles, viewportStartIndex) => {
   const second = lowest(focused.slice(midpoint), viewportStartIndex + midpoint);
   const slope = (second.candle.low - first.candle.low) / (second.index - first.index);
   const projected = second.candle.low + slope * (candles.length - 1 - second.index);
-  return { first, second, slope, projected, violations: 0, score: Number.POSITIVE_INFINITY };
+  const violations = candles.slice(first.index).filter((candle, offset) => {
+    const support = first.candle.low + slope * offset;
+    return candle.low < support * 0.98;
+  }).length;
+  return { first, second, slope, projected, violations, score: Number.POSITIVE_INFINITY };
 };
 
 const quantile = (values, percentile) => {
@@ -110,7 +114,7 @@ try {
   const supplyLow = quantile(recent.map((candle) => candle.high), 0.82);
   const supplyStart = recent.find((candle) => candle.high >= supplyLow) ?? recent[0];
   const invalidation = support.projected * 0.98;
-  if (support.slope <= 0 || support.projected > candles.at(-1).low * 1.01) {
+  if (support.slope <= 0 || support.projected > candles.at(-1).low * 1.01 || support.violations > 1) {
     throw new Error("MU live data did not produce a valid, unbroken rising support candidate in the focused window");
   }
   const now = new Date().toISOString();
@@ -214,17 +218,30 @@ try {
   renderUrl.searchParams.set("reference", "xyz:MU");
   renderUrl.searchParams.set("documentId", created.id);
   renderUrl.searchParams.set("scope", "page");
+  const inspectUrl = new URL(renderUrl);
+  inspectUrl.pathname = "/inspect";
+  const inspectResponse = await fetch(inspectUrl);
+  if (!inspectResponse.ok) throw new Error(`Renderer inspection failed: ${inspectResponse.status} ${await inspectResponse.text()}`);
+  const renderMetadata = await inspectResponse.json();
   const renderResponse = await fetch(renderUrl);
   if (!renderResponse.ok) throw new Error(`Renderer failed: ${renderResponse.status} ${await renderResponse.text()}`);
   const encodedMetadata = renderResponse.headers.get("x-unimarket-render-metadata");
   if (!encodedMetadata) throw new Error("Renderer response did not include visual metadata");
-  const renderMetadata = JSON.parse(Buffer.from(encodedMetadata, "base64url").toString("utf8"));
+  const compactMetadata = JSON.parse(Buffer.from(encodedMetadata, "base64url").toString("utf8"));
+  if (compactMetadata.candleHash !== renderMetadata.candleHash) {
+    throw new Error("Renderer image and inspection metadata used different candle snapshots");
+  }
   const annotationCount = renderMetadata.annotationCount;
   const renderedDrawingIds = renderMetadata.renderedDrawingIds;
+  const visibleDrawingIds = renderMetadata.visibleDrawingIds;
+  const clippedDrawingIds = renderMetadata.clippedDrawingIds;
   const renderedProfileBins = renderMetadata.renderedProfileBins;
   const browserErrors = renderMetadata.browserErrors;
   if (annotationCount !== 3 || renderedDrawingIds.length !== 3) {
     throw new Error(`Expected 3 live MU drawings, got annotationCount=${annotationCount}, rendered=${renderedDrawingIds.length}`);
+  }
+  if (visibleDrawingIds.length !== 3 || clippedDrawingIds.length !== 0) {
+    throw new Error(`Expected all live MU drawings to intersect the focused viewport, clipped=${clippedDrawingIds.join(",")}`);
   }
   if (renderedProfileBins < 8) throw new Error(`Expected a rendered MU volume profile, got ${renderedProfileBins} bins`);
   if (browserErrors.length > 0) throw new Error(`Live MU page emitted browser errors: ${browserErrors.join(" | ")}`);
@@ -249,6 +266,8 @@ try {
     finalStatus: published.status,
     annotationCount,
     renderedDrawingIds,
+    visibleDrawingIds,
+    clippedDrawingIds,
     renderedProfileBins,
     viewportCandleCount: viewportCandles.length,
     viewportFrom: viewportCandles[0].timestamp,

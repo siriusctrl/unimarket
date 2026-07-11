@@ -128,7 +128,7 @@ Rules:
 | `GET` | `/api/analysis/documents/:id` | public | Read one stored revision |
 | `PUT` | `/api/analysis/documents/:id` | owning key or admin | Replace a draft; published revisions are immutable |
 | `POST` | `/api/analysis/documents/:id/publish` | owning key or admin | Publish a draft with reasoning |
-| `GET` | `/api/analysis/documents/:id/render-metadata` | public | Inspect drawing anchors and clipping against the declared viewport |
+| `GET` | `/api/analysis/documents/:id/render-metadata` | public | Inspect drawing anchors against the declared time viewport; use renderer `/inspect` for actual screen clipping |
 
 Context example:
 
@@ -142,11 +142,11 @@ Document writes use `unimarket.chart-analysis/v1`. Supported drawings are `horiz
 
 Drawing labels may set `labelPlacement.at` to `start`, `middle`, or `end` with bounded `offsetX` and `offsetY`. Marker shapes render distinctly as `circle`, `diamond`, `arrowUp`, or `arrowDown`.
 
-Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`. The API replaces `metadata.createdBy.actorId` with the authenticated identity. It rejects mismatched candle hashes with `409 SNAPSHOT_MISMATCH`, instrument changes on a draft, and every update to a published document.
+Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`. The API derives `metadata.createdBy`, `metadata.createdAt`, and the database audit envelope from the authenticated request; model-supplied `runId` remains opaque provenance. It rejects mismatched candle hashes, cross-interval revisions, instrument or interval changes on a draft, and every update to a published document.
 
 Analysis reads, including drafts, are intentionally public so a deployed renderer can preview an exact `documentId` before publication. Do not place credentials or private research in an analysis document.
 
-The selected document interval must match the requested context interval; mismatches return `409 INTERVAL_MISMATCH`. Create separate daily, weekly, or monthly documents instead of applying one interval's indicator parameters to another.
+The selected document interval must match the requested context interval; mismatches return `409 INTERVAL_MISMATCH`. With `documentId`, context is rebuilt from the stored custom `from`/`to` range and must reproduce the stored hash or return `409 SNAPSHOT_MISMATCH`. Create separate daily, weekly, or monthly documents instead of applying one interval's indicator parameters to another.
 
 ### Chart image service
 
@@ -154,9 +154,10 @@ The separately deployed renderer defaults to `http://<host>:3101`:
 
 ```http
 GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example&scope=chart&theme=dark
+GET /inspect?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example&scope=chart&theme=dark
 ```
 
-It returns `image/png`. `scope` is `chart` or `page`; optional `width` and `height` control the browser viewport. `X-Unimarket-Render-Metadata` is base64url-encoded JSON containing the document ID, candle hash, focused viewport, rendered drawing IDs, profile-bin count, and browser errors.
+`/render` returns `image/png`; its compact `X-Unimarket-Render-Metadata` header contains hashes and counts without risking proxy header limits. `/inspect` returns full JSON including rendered, visible, and clipped drawing IDs. `scope` is `chart` or `page`; optional `width` and `height` control the browser viewport. The service binds to localhost by default, limits concurrent renders, returns `429 RENDER_BUSY` under pressure, and reports browser health through `/health`.
 
 ### Search and browse contract
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChartContext, StoredChartAnalysis } from "@unimarket/analysis";
 
 import { createAnalysisApiClient } from "./analysis-api";
@@ -22,9 +22,16 @@ export const useAnalysisWorkspace = ({
   const [selectedDocument, setSelectedDocument] = useState<StoredChartAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
     setLoading(true);
+    setError(null);
+    setContext(null);
+    setDocuments([]);
+    setSelectedDocument(null);
     try {
       const listed = await client.listDocuments({ market, reference, interval });
       let selected = documentId
@@ -47,19 +54,24 @@ export const useAnalysisWorkspace = ({
         lookback,
         documentId: selected?.id,
       });
+      if (requestGeneration.current !== generation) return;
       setContext(nextContext);
       setDocuments(nextDocuments);
       setSelectedDocument(selected ?? null);
       setError(null);
     } catch (nextError) {
+      if (requestGeneration.current !== generation) return;
       setError(nextError instanceof Error ? nextError.message : "Analysis workspace could not be loaded");
     } finally {
-      setLoading(false);
+      if (requestGeneration.current === generation) setLoading(false);
     }
   }, [client, documentId, interval, lookback, market, reference]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      requestGeneration.current += 1;
+    };
   }, [refresh]);
 
   return {

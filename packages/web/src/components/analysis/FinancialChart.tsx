@@ -26,6 +26,12 @@ const COLOR_MAP = {
 const SERIES_COLORS = ["#69b892", "#d7b86b", "#c37c93", "#73a3b8", "#ad8fd0"];
 type ProfileBar = { x: number; y: number; width: number; height: number; inValueArea: boolean };
 
+const intersectsViewport = (drawing: ProjectedDrawing, size: { width: number; height: number }) => {
+  const x = drawing.points.map((point) => point.x);
+  const y = drawing.points.map((point) => point.y);
+  return Math.max(...x) >= 0 && Math.min(...x) <= size.width && Math.max(...y) >= 0 && Math.min(...y) <= size.height;
+};
+
 const timestamp = (value: string): UTCTimestamp => Math.floor(Date.parse(value) / 1_000) as UTCTimestamp;
 
 const lineDash = (style: ProjectedDrawing["lineStyle"]): string | undefined => {
@@ -149,6 +155,8 @@ export const FinancialChart = ({
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [drawings, setDrawings] = useState<ProjectedDrawing[]>([]);
   const [profileBars, setProfileBars] = useState<ProfileBar[]>([]);
+  const [visibleDrawingIds, setVisibleDrawingIds] = useState<string[]>([]);
+  const [projectionReady, setProjectionReady] = useState(false);
   const [dark, setDark] = useState(() => window.document.documentElement.classList.contains("dark"));
   const drawingLayers = useMemo(
     () => document?.layers.filter((layer): layer is DrawingLayer => "rationale" in layer && layer.visible) ?? [],
@@ -165,6 +173,7 @@ export const FinancialChart = ({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    setProjectionReady(false);
     const chart = createChart(container, {
       width: container.clientWidth,
       height: container.clientHeight,
@@ -221,7 +230,12 @@ export const FinancialChart = ({
     })));
 
     let colorIndex = 0;
+    const oscillatorPanes = new Map<string, number>();
     context.indicators.filter((indicator) => indicator.pane !== "volumeProfile").forEach((indicator) => {
+      if (indicator.pane === "oscillator" && !oscillatorPanes.has(indicator.type)) {
+        oscillatorPanes.set(indicator.type, oscillatorPanes.size + 1);
+      }
+      const paneIndex = indicator.pane === "oscillator" ? oscillatorPanes.get(indicator.type)! : 0;
       const keys = Object.keys(indicator.points.find((point) => Object.values(point.values).some((value) => value !== null))?.values ?? {});
       keys.forEach((key) => {
         const series = chart.addSeries(LineSeries, {
@@ -229,7 +243,7 @@ export const FinancialChart = ({
           lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: false,
-        }, indicator.pane === "oscillator" ? 1 : 0);
+        }, paneIndex);
         colorIndex += 1;
         series.setData(indicator.points.flatMap((point) => {
           const value = point.values[key];
@@ -253,11 +267,16 @@ export const FinancialChart = ({
         return projected ? [projected] : [];
       }) : [];
       setDrawings(next);
+      setVisibleDrawingIds(next.filter((drawing) => intersectsViewport(drawing, {
+        width: container.clientWidth,
+        height: container.clientHeight,
+      })).map((drawing) => drawing.id));
 
       const profile = context.indicators.find((indicator) => indicator.type === "volumeProfile")?.profile;
       const maxVolume = Math.max(0, ...(profile?.bins.map((bin) => bin.volume) ?? []));
       if (!profile || maxVolume === 0) {
         setProfileBars([]);
+        setProjectionReady(true);
         return;
       }
       const maxWidth = Math.min(120, container.clientWidth * 0.14);
@@ -275,6 +294,7 @@ export const FinancialChart = ({
           inValueArea: bin.inValueArea,
         }];
       }));
+      setProjectionReady(true);
     };
 
     if (document?.viewport.from && document.viewport.to) {
@@ -311,6 +331,11 @@ export const FinancialChart = ({
       data-viewport-from={document?.viewport.from ?? context.data.range.startTime}
       data-viewport-to={document?.viewport.to ?? context.data.range.endTime}
       data-price-scale={document?.viewport.priceScale ?? "auto"}
+      data-projection-ready={projectionReady ? "true" : "false"}
+      data-rendered-annotation-count={drawings.length}
+      data-visible-drawing-ids={JSON.stringify(visibleDrawingIds)}
+      data-clipped-drawing-ids={JSON.stringify(drawings.filter((drawing) => !visibleDrawingIds.includes(drawing.id)).map((drawing) => drawing.id))}
+      data-oscillator-pane-count={new Set(context.indicators.filter((indicator) => indicator.pane === "oscillator").map((indicator) => indicator.type)).size}
     >
       <DrawingOverlay drawings={drawings} profileBars={profileBars} />
     </div>

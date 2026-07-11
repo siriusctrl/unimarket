@@ -4,8 +4,8 @@ export type DrawingRenderMetadata = {
   id: string;
   type: DrawingLayer["type"];
   anchors: ChartPoint[];
-  anchorsVisible: boolean;
-  clipped: boolean;
+  anchorsInsideTimeViewport: boolean;
+  timeClipped: boolean;
 };
 
 const drawingAnchors = (layer: DrawingLayer, document: ChartAnalysisDocument): ChartPoint[] => {
@@ -29,10 +29,16 @@ export const buildDrawingRenderMetadata = (
   return document.layers.flatMap((layer) => {
     if (!("rationale" in layer)) return [];
     const anchors = drawingAnchors(layer, document);
-    const anchorsVisible = anchors.every((anchor) => {
+    const anchorsInsideTimeViewport = anchors.every((anchor) => {
       const timestamp = Date.parse(anchor.time);
       return timestamp >= from && timestamp <= to;
     });
-    return [{ id: layer.id, type: layer.type, anchors, anchorsVisible, clipped: !anchorsVisible }];
+    return [{
+      id: layer.id,
+      type: layer.type,
+      anchors,
+      anchorsInsideTimeViewport,
+      timeClipped: !anchorsInsideTimeViewport,
+    }];
   });
 };

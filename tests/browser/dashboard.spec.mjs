@@ -85,6 +85,8 @@ test("model-authored MU analysis renders financial data and time-price drawings"
   await expect(page.getByText("MU remains inside an ascending daily channel")).toBeVisible();
 
   const chart = page.locator("[data-analysis-ready='true']");
+  await expect(chart).toHaveAttribute("data-projection-ready", "true");
+  await expect(chart).toHaveAttribute("data-oscillator-pane-count", "1");
   await expect(chart).toHaveAttribute("data-annotation-count", "4");
   await expect(chart).toHaveAttribute("data-viewport-from", analysisDocumentsFixture.documents[1].document.viewport.from);
   expect(await chart.locator("canvas").count()).toBeGreaterThanOrEqual(2);
@@ -102,7 +104,10 @@ test("model can preview an exact draft revision before publishing", async ({ pag
   await page.goto("/analysis/hyperliquid/xyz%3AMU?documentId=ana-mu-draft");
   await expect(page.getByText("Draft revision isolates the current supply boundary before publication.")).toBeVisible();
   const chart = page.locator("[data-analysis-ready='true']");
-  await expect(chart).toHaveAttribute("data-annotation-count", "2");
+  await expect(chart).toHaveAttribute("data-projection-ready", "true");
+  await expect(chart).toHaveAttribute("data-annotation-count", "3");
+  await expect(chart).toHaveAttribute("data-rendered-annotation-count", "3");
+  await expect(chart).toHaveAttribute("data-clipped-drawing-ids", '["draft-offscreen"]');
   await expect(chart.locator("[data-drawing-id='resistance-980']")).toBeVisible();
   await expect(chart.locator("[data-drawing-id='draft-rejection'] path")).toBeVisible();
   await expect.poll(() => apiCallsByPage.get(page).some((call) => call.includes("documentId=ana-mu-draft"))).toBe(true);

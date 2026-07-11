@@ -323,5 +323,6 @@ export const chartAnalyses = sqliteTable(
     index("chart_analyses_instrument_idx").on(table.market, table.reference, table.createdAt),
     index("chart_analyses_status_idx").on(table.status),
     index("chart_analyses_created_by_idx").on(table.createdBy),
+    index("chart_analyses_lookup_idx").on(table.market, table.reference, table.interval, table.status, table.createdAt),
   ],
 );

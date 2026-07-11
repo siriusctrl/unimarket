@@ -106,16 +106,17 @@ const polymarketAdapter: MarketAdapter = {
         volume: 1_000 + index * 20,
       };
     });
+    const customRange = options?.startTime && options?.endTime;
     return {
       reference,
       interval: options?.interval ?? "1d",
       resampledFrom: null,
       range: {
-        mode: "lookback",
-        lookback: options?.lookback ?? "1y",
-        asOf: candles.at(-1)!.timestamp,
-        startTime: candles[0].timestamp,
-        endTime: candles.at(-1)!.timestamp,
+        mode: customRange ? "custom" : "lookback",
+        lookback: customRange ? null : options?.lookback ?? "1y",
+        asOf: customRange ? options.endTime! : candles.at(-1)!.timestamp,
+        startTime: customRange ? options.startTime! : candles[0].timestamp,
+        endTime: customRange ? options.endTime! : candles.at(-1)!.timestamp,
       },
       candles,
       summary: {
@@ -1053,7 +1054,13 @@ describe("api integration", () => {
       status: "draft",
       version: 1,
       createdBy: user.userId,
-      document: { metadata: { createdBy: { actorId: user.userId }, runId: "model-provider-opaque-run" } },
+      document: {
+        metadata: {
+          createdBy: { kind: "agent", actorId: user.userId },
+          runId: "model-provider-opaque-run",
+          createdAt: expect.not.stringMatching(/^2026-03-01/),
+        },
+      },
     });
 
     const intervalMismatch = await app.request(
@@ -1062,21 +1069,49 @@ describe("api integration", () => {
     expect(intervalMismatch.status).toBe(409);
     expect((await intervalMismatch.json()).error.code).toBe("INTERVAL_MISMATCH");
 
+    const exactDraftContext = await app.request(
+      `/api/analysis/context?market=polymarket&reference=MU&interval=1d&lookback=7d&documentId=${created.id}`,
+    );
+    expect(exactDraftContext.status).toBe(200);
+    expect(await exactDraftContext.json()).toMatchObject({
+      data: {
+        range: {
+          mode: "custom",
+          startTime: document.data.from,
+          endTime: document.data.to,
+        },
+        snapshotHash: document.data.snapshotHash,
+      },
+    });
+
+    const updateRequest = (reasoning: string) => authedJson(`/api/analysis/documents/${created.id}`, user.apiKey, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document, reasoning }),
+    });
+    const updateResponses = await Promise.all([
+      updateRequest("First concurrent draft update"),
+      updateRequest("Second concurrent draft update"),
+    ]);
+    expect(updateResponses.map((response) => response.status).sort()).toEqual([200, 409]);
+
     const metadataResponse = await app.request(`/api/analysis/documents/${created.id}/render-metadata`);
     expect(metadataResponse.status).toBe(200);
     expect((await metadataResponse.json()).drawings[0]).toMatchObject({
       id: "rising-support",
-      anchorsVisible: true,
-      clipped: false,
+      anchorsInsideTimeViewport: true,
+      timeClipped: false,
     });
 
-    const publishResponse = await authedJson(`/api/analysis/documents/${created.id}/publish`, user.apiKey, {
+    const publishRequest = () => authedJson(`/api/analysis/documents/${created.id}/publish`, user.apiKey, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ reasoning: "Rendered coordinates and thesis were reviewed" }),
     });
-    expect(publishResponse.status).toBe(200);
-    expect((await publishResponse.json()).status).toBe("published");
+    const publishResponses = await Promise.all([publishRequest(), publishRequest()]);
+    expect(publishResponses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const successfulPublish = publishResponses.find((response) => response.status === 200)!;
+    expect((await successfulPublish.json()).status).toBe("published");
 
     const immutableResponse = await authedJson(`/api/analysis/documents/${created.id}`, user.apiKey, {
       method: "PUT",

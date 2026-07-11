@@ -279,7 +279,7 @@ Use a repeatable sequence:
 
 Use `analysis-context` to obtain candles, indicator output, drawing capabilities, and the exact snapshot hash. The model chooses the interval, lookback, focused viewport, and as many drawing layers as the structure requires; do not default every ticker to one annual channel. Write a `unimarket.chart-analysis/v1` JSON file using time-price coordinates, run `analysis-validate`, then use `analysis-create`.
 
-Use `analysis-image-url` or `analysis-render` to inspect the exact draft. Critique whether anchors correspond to visible pivots, extensions remain relevant in the selected regime, labels collide, and channels or zones actually describe price behavior. Update the same draft and render again until the visual is coherent. Publish only after this loop; a successful DOM assertion is not visual approval.
+Use `analysis-image-url` or `analysis-render` to inspect the exact draft, and `analysis-inspect` to check which declared drawings actually intersect the viewport. Critique whether anchors correspond to visible pivots, extensions remain relevant in the selected regime, labels collide, and channels or zones actually describe price behavior. Update the same draft and render again until the visual is coherent. Publish only after this loop; a successful DOM assertion is not visual approval.
 
 The platform stores the document format and authenticated actor identity, not an AI provider. Never emit arbitrary JavaScript, CSS, canvas pixels, or unlabelled volume-at-price claims. `volumeProfile` is an OHLCV range approximation unless a future adapter provides finer trade data.
 

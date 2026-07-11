@@ -56,6 +56,10 @@ const drawingMetadataShape = {
 const distinctAnchors = <T extends { time: string; price: number }[]>(anchors: T): boolean =>
   new Set(anchors.map((anchor) => `${anchor.time}:${anchor.price}`)).size === anchors.length;
 
+const orderedAnchorsSchema = z.tuple([chartPointSchema, chartPointSchema])
+  .refine(distinctAnchors, "anchors must be distinct")
+  .refine(([first, second]) => Date.parse(first.time) < Date.parse(second.time), "anchor times must increase");
+
 const horizontalLineSchema = z.object({
   ...drawingMetadataShape,
   type: z.literal("horizontalLine"),
@@ -70,7 +74,7 @@ const verticalLineSchema = z.object({
 
 const twoAnchorDrawing = {
   ...drawingMetadataShape,
-  anchors: z.tuple([chartPointSchema, chartPointSchema]).refine(distinctAnchors, "anchors must be distinct"),
+  anchors: orderedAnchorsSchema,
 };
 
 const trendLineSchema = z.object({
@@ -87,16 +91,27 @@ const raySchema = z.object({
 const channelSchema = z.object({
   ...drawingMetadataShape,
   type: z.literal("channel"),
-  base: z.tuple([chartPointSchema, chartPointSchema]).refine(distinctAnchors, "base anchors must be distinct"),
+  base: orderedAnchorsSchema,
   parallelAnchor: chartPointSchema,
   fillOpacity: z.number().min(0).max(0.35).default(0.08),
-}).strict();
+}).strict().superRefine((channel, ctx) => {
+  const [first, second] = channel.base;
+  const timeRatio = (Date.parse(channel.parallelAnchor.time) - Date.parse(first.time)) /
+    (Date.parse(second.time) - Date.parse(first.time));
+  const basePriceAtAnchor = first.price + (second.price - first.price) * timeRatio;
+  if (Math.abs(channel.parallelAnchor.price - basePriceAtAnchor) < 1e-8) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["parallelAnchor"], message: "parallel anchor must define a non-zero channel width" });
+  }
+});
 
 const rectangleSchema = z.object({
   ...twoAnchorDrawing,
   type: z.literal("rectangle"),
   fillOpacity: z.number().min(0).max(0.35).default(0.08),
-}).strict();
+}).strict().refine((rectangle) => rectangle.anchors[0].price !== rectangle.anchors[1].price, {
+  path: ["anchors"],
+  message: "rectangle anchors must define a non-zero price range",
+});
 
 const markerSchema = z.object({
   ...drawingMetadataShape,
@@ -112,7 +127,7 @@ const textSchema = z.object({
   text: z.string().trim().min(1).max(500),
 }).strict();
 
-export const drawingLayerSchema = z.discriminatedUnion("type", [
+export const drawingLayerSchema = z.union([
   horizontalLineSchema,
   verticalLineSchema,
   trendLineSchema,

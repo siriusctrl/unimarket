@@ -220,7 +220,7 @@ Use `labelPlacement` when multiple structures would otherwise collide, and choos
 
 After creating a draft, preview that exact revision at `/analysis/{market}/{reference}?documentId={id}` before publishing it.
 
-For a model-readable image, call `GET {RENDER_BASE_URL}/render?market={market}&reference={reference}&documentId={id}` or use `analysis-image-url` / `analysis-render`. Render, inspect, critique, update, and repeat; layer-count checks alone do not approve the analysis.
+For a model-readable image, call `GET {RENDER_BASE_URL}/render?market={market}&reference={reference}&documentId={id}` or use `analysis-image-url` / `analysis-render`. Use `analysis-inspect` for full rendered, visible, and clipped drawing IDs. Render, inspect, critique, update, and repeat; layer-count checks alone do not approve the analysis.
 
 ## Order Writes
 

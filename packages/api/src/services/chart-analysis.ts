@@ -58,6 +58,8 @@ export const buildChartContext = async ({
   interval,
   lookback,
   asOf,
+  startTime,
+  endTime,
   indicatorLayers,
 }: {
   registry: MarketRegistry;
@@ -66,13 +68,17 @@ export const buildChartContext = async ({
   interval: PriceHistoryInterval;
   lookback: PriceHistoryLookback;
   asOf?: string;
+  startTime?: string;
+  endTime?: string;
   indicatorLayers?: IndicatorLayer[];
 }): Promise<ChartContext> => {
   const adapter = registry.get(market);
   if (!adapter) throw new Error(`Market not found: ${market}`);
   if (!adapter.getPriceHistory) throw new Error(`Market does not support price history: ${market}`);
 
-  const history = await adapter.getPriceHistory(reference, { interval, lookback, asOf });
+  const history = await adapter.getPriceHistory(reference, startTime && endTime
+    ? { interval, startTime, endTime }
+    : { interval, lookback, asOf });
   const candles = history.candles.map((candle) => ({ ...candle }));
   const snapshotHash = `sha256:${createHash("sha256").update(JSON.stringify(candles)).digest("hex")}`;
   const indicators = computeIndicators(

@@ -35,6 +35,8 @@ try {
     viewportTo: element.getAttribute("data-viewport-to"),
     priceScale: element.getAttribute("data-price-scale"),
     renderedProfileBins: element.querySelectorAll("[data-profile-bin]").length,
+    visibleDrawingIds: JSON.parse(element.getAttribute("data-visible-drawing-ids") ?? "[]"),
+    clippedDrawingIds: JSON.parse(element.getAttribute("data-clipped-drawing-ids") ?? "[]"),
     renderedDrawingIds: Array.from(element.querySelectorAll("[data-drawing-id]"))
       .map((drawing) => drawing.getAttribute("data-drawing-id"))
       .filter(Boolean),

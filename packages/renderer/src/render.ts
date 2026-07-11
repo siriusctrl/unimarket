@@ -10,6 +10,8 @@ export type AnalysisRenderResult = {
     candleHash: string | null;
     annotationCount: number;
     renderedDrawingIds: string[];
+    visibleDrawingIds: string[];
+    clippedDrawingIds: string[];
     renderedProfileBins: number;
     viewportFrom: string | null;
     viewportTo: string | null;
@@ -39,9 +41,7 @@ export const renderAnalysis = async (
     await chart.waitFor({ state: "visible", timeout: 15_000 });
     await page.waitForFunction(() => {
       const element = document.querySelector("[data-analysis-ready='true']");
-      if (!element) return false;
-      const expected = Number(element.getAttribute("data-annotation-count") ?? 0);
-      return element.querySelectorAll("[data-drawing-id]").length === expected;
+      return element?.getAttribute("data-projection-ready") === "true";
     });
     await page.evaluate(() => new Promise<void>((resolve) => {
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
@@ -55,6 +55,8 @@ export const renderAnalysis = async (
       renderedDrawingIds: Array.from(element.querySelectorAll("[data-drawing-id]"))
         .map((drawing) => drawing.getAttribute("data-drawing-id"))
         .filter((id): id is string => id !== null),
+      visibleDrawingIds: JSON.parse(element.getAttribute("data-visible-drawing-ids") ?? "[]") as string[],
+      clippedDrawingIds: JSON.parse(element.getAttribute("data-clipped-drawing-ids") ?? "[]") as string[],
       renderedProfileBins: element.querySelectorAll("[data-profile-bin]").length,
       viewportFrom: element.getAttribute("data-viewport-from"),
       viewportTo: element.getAttribute("data-viewport-to")

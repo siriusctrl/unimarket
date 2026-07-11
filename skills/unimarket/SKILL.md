@@ -90,7 +90,7 @@ Preferred workflow commands:
 - `scan <market> <references_csv> [interval] [lookback] [as_of]` for batch inspection of supplied references with constraints, quotes, orderbook summaries, optional funding, and optional history summaries
 - `analysis-context <market> <reference> [interval] [lookback] [as_of]` for candles, deterministic indicators, snapshot hash, and drawing capabilities
 - `analysis-validate`, `analysis-create`, `analysis-update`, `analysis-publish`, and `analysis-render-metadata` for provider-neutral chart documents
-- `analysis-image-url` and `analysis-render` for repeated image review through the persistent renderer; inspect the image, revise the draft, and render again before publishing
+- `analysis-image-url`, `analysis-inspect`, and `analysis-render` for repeated image review through the persistent renderer; inspect visible/clipped IDs and the image, revise the draft, and render again before publishing
 - `order-json <payload_json> [idempotency_key]` for forecast-backed orders that include a `prediction` object
 
 Core commands still available:
