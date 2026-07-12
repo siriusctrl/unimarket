@@ -1053,6 +1053,7 @@ describe("api integration", () => {
     expect(created).toMatchObject({
       status: "draft",
       version: 1,
+      revision: 1,
       createdBy: user.userId,
       document: {
         metadata: {
@@ -1094,10 +1095,14 @@ describe("api integration", () => {
       updateRequest("Second concurrent draft update"),
     ]);
     expect(updateResponses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const successfulUpdate = updateResponses.find((response) => response.status === 200)!;
+    expect((await successfulUpdate.json()).revision).toBe(2);
 
     const metadataResponse = await app.request(`/api/analysis/documents/${created.id}/render-metadata`);
     expect(metadataResponse.status).toBe(200);
-    expect((await metadataResponse.json()).drawings[0]).toMatchObject({
+    const renderMetadata = await metadataResponse.json();
+    expect(renderMetadata.revision).toBe(2);
+    expect(renderMetadata.drawings[0]).toMatchObject({
       id: "rising-support",
       anchorsInsideTimeViewport: true,
       timeClipped: false,
@@ -1111,7 +1116,7 @@ describe("api integration", () => {
     const publishResponses = await Promise.all([publishRequest(), publishRequest()]);
     expect(publishResponses.map((response) => response.status).sort()).toEqual([200, 409]);
     const successfulPublish = publishResponses.find((response) => response.status === 200)!;
-    expect((await successfulPublish.json()).status).toBe("published");
+    expect(await successfulPublish.json()).toMatchObject({ status: "published", revision: 3 });
 
     const immutableResponse = await authedJson(`/api/analysis/documents/${created.id}`, user.apiKey, {
       method: "PUT",

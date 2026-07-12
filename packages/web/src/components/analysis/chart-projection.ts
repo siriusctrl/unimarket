@@ -1,6 +1,7 @@
-import type { ChartAnalysisDocument, ChartPoint, DrawingLayer } from "@unimarket/analysis";
+import type { ChartAnalysisDocument, ChartPoint, ComputedIndicator, DrawingLayer } from "@unimarket/analysis";
 
 export type ScreenPoint = { x: number; y: number };
+export type ProfileBar = { x: number; y: number; width: number; height: number; inValueArea: boolean };
 export type ProjectedDrawing = {
   id: string;
   type: DrawingLayer["type"];
@@ -19,6 +20,40 @@ export type ProjectedDrawing = {
 type Projectors = {
   time: (value: string) => number | null;
   price: (value: number) => number | null;
+};
+
+export const drawingIntersectsViewport = (
+  drawing: ProjectedDrawing,
+  size: { width: number; height: number },
+): boolean => {
+  const x = drawing.points.map((point) => point.x);
+  const y = drawing.points.map((point) => point.y);
+  return Math.max(...x) >= 0 && Math.min(...x) <= size.width && Math.max(...y) >= 0 && Math.min(...y) <= size.height;
+};
+
+export const projectVolumeProfile = (
+  profile: ComputedIndicator["profile"],
+  projectPrice: (price: number) => number | null,
+  containerWidth: number,
+): ProfileBar[] => {
+  const maxVolume = Math.max(0, ...(profile?.bins.map((bin) => bin.volume) ?? []));
+  if (!profile || maxVolume === 0) return [];
+
+  const maxWidth = Math.min(120, containerWidth * 0.14);
+  const rightEdge = containerWidth - 72;
+  return profile.bins.flatMap((bin) => {
+    const top = projectPrice(bin.high);
+    const bottom = projectPrice(bin.low);
+    if (top === null || bottom === null) return [];
+    const width = maxWidth * (bin.volume / maxVolume);
+    return [{
+      x: rightEdge - width,
+      y: Math.min(top, bottom),
+      width,
+      height: Math.max(1, Math.abs(bottom - top)),
+      inValueArea: bin.inValueArea,
+    }];
+  });
 };
 
 const projectPoint = (point: ChartPoint, projectors: Projectors): ScreenPoint | null => {

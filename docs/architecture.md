@@ -132,11 +132,11 @@ Drawings use time-price coordinates. Indicator layers store calculation paramete
 
 ### `packages/renderer`
 
-The renderer is a provider-neutral, long-running Playwright service. It accepts structured `market`, `reference`, and `documentId` parameters, opens the configured Unimarket web deployment, waits for that exact draft to finish projecting, and returns `image/png`; `/inspect` exposes full visibility and clipping metadata. The browser process stays warm across requests, relaunches after disconnect, binds to localhost by default, and applies bounded concurrency so a model can inspect many drafts without turning the renderer into an unbounded public browser pool.
+The renderer is a provider-neutral, long-running Playwright service. It accepts structured `market`, `reference`, and `documentId` parameters, opens the configured Unimarket web deployment, and waits for that exact draft to finish projecting. `/render` takes the requested screenshot; `/inspect` returns visibility and clipping metadata without doing unused image work. The browser process stays warm across requests, relaunches after disconnect, binds to localhost by default, and applies bounded concurrency so a model can inspect many drafts without turning the renderer into an unbounded public browser pool.
 
 ### `packages/api`
 
-The `api` package wires everything together.
+The `api` package wires everything together. Analysis routes own HTTP validation and authorization, while the analysis repository owns SQL and explicit revision-based compare-and-swap updates.
 
 It handles:
 - authentication and admin boundaries

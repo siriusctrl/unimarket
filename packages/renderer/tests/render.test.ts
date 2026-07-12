@@ -1,7 +1,7 @@
 import type { Browser } from "playwright";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { renderAnalysis } from "../src/render.js";
+import { inspectAnalysis, renderAnalysis } from "../src/render.js";
 import type { AnalysisRenderRequest } from "../src/request.js";
 
 const request: AnalysisRenderRequest = {
@@ -15,6 +15,7 @@ const request: AnalysisRenderRequest = {
 };
 
 const createBrowser = ({ consoleError = false } = {}) => {
+  let closed = false;
   const handlers = new Map<string, (value: never) => void>();
   const attributes = new Map([
     ["data-projection-ready", "true"],
@@ -45,7 +46,11 @@ const createBrowser = ({ consoleError = false } = {}) => {
   const chart = {
     waitFor: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockImplementation((callback: (target: typeof element) => unknown) => callback(element)),
-    screenshot: vi.fn().mockResolvedValue(Buffer.from("chart")),
+    screenshot: vi.fn().mockImplementation(async () => {
+      await Promise.resolve();
+      if (closed) throw new Error("chart closed before screenshot completed");
+      return Buffer.from("chart");
+    }),
   };
   const page = {
     on: vi.fn((event: string, handler: (value: never) => void) => handlers.set(event, handler)),
@@ -57,9 +62,14 @@ const createBrowser = ({ consoleError = false } = {}) => {
     locator: vi.fn().mockReturnValue(chart),
     waitForFunction: vi.fn().mockImplementation((callback: () => unknown) => callback()),
     evaluate: vi.fn().mockImplementation((callback: () => unknown) => callback()),
-    waitForTimeout: vi.fn().mockResolvedValue(undefined),
-    screenshot: vi.fn().mockResolvedValue(Buffer.from("page")),
-    close: vi.fn().mockResolvedValue(undefined),
+    screenshot: vi.fn().mockImplementation(async () => {
+      await Promise.resolve();
+      if (closed) throw new Error("page closed before screenshot completed");
+      return Buffer.from("page");
+    }),
+    close: vi.fn().mockImplementation(async () => {
+      closed = true;
+    }),
   };
   const browser = { newPage: vi.fn().mockResolvedValue(page) } as unknown as Browser;
   return { browser, chart, page };
@@ -91,6 +101,15 @@ describe("analysis rendering", () => {
     const result = await renderAnalysis(browser, "https://app.example.com", { ...request, scope: "page" });
     expect(result.image.toString()).toBe("page");
     expect(page.screenshot).toHaveBeenCalledWith({ fullPage: true, animations: "allow", type: "png" });
+    expect(page.close).toHaveBeenCalledOnce();
+  });
+
+  it("inspects projected metadata without taking a discarded screenshot", async () => {
+    const { browser, chart, page } = createBrowser();
+    const metadata = await inspectAnalysis(browser, "https://app.example.com", request);
+    expect(metadata.visibleDrawingIds).toEqual(["support"]);
+    expect(chart.screenshot).not.toHaveBeenCalled();
+    expect(page.screenshot).not.toHaveBeenCalled();
     expect(page.close).toHaveBeenCalledOnce();
   });
 

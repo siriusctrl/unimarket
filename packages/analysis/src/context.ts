@@ -57,6 +57,7 @@ export type StoredChartAnalysis = {
   id: string;
   supersedesId: string | null;
   version: number;
+  revision: number;
   status: "draft" | "published";
   document: ChartAnalysisDocument;
   createdBy: string;

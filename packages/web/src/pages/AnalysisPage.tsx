@@ -181,7 +181,7 @@ export const AnalysisPage = () => {
               <section>
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="flex items-center gap-2 font-semibold"><FileJson2 className="h-4 w-4 text-primary" /> Analysis document</h3>
-                  {selectedDocument ? <span className="font-mono text-[11px] text-muted-foreground">v{selectedDocument.version} · {selectedDocument.status}</span> : null}
+                  {selectedDocument ? <span className="font-mono text-[11px] text-muted-foreground">v{selectedDocument.version}.r{selectedDocument.revision} · {selectedDocument.status}</span> : null}
                 </div>
                 {selectedDocument ? (
                   <div className="mt-3 space-y-4 text-sm">

@@ -492,6 +492,7 @@ export const analysisDocumentsFixture = {
     id: "ana-mu-draft",
     supersedesId: "ana-mu-proof",
     version: 2,
+    revision: 1,
     status: "draft",
     document: {
       ...analysisDocument,
@@ -532,6 +533,7 @@ export const analysisDocumentsFixture = {
     id: "ana-mu-proof",
     supersedesId: null,
     version: 1,
+    revision: 2,
     status: "published",
     document: analysisDocument,
     createdBy: "agent-atlas",

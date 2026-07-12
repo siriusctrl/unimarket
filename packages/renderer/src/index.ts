@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { chromium } from "playwright";
 
-import { renderAnalysis } from "./render.js";
+import { inspectAnalysis, renderAnalysis } from "./render.js";
 import { parseRenderRequest, type AnalysisRenderRequest } from "./request.js";
 
 const port = Number(process.env.PORT ?? 3101);
@@ -59,40 +59,30 @@ const server = createServer(async (request, response) => {
 
   activeRenders += 1;
   try {
-    const result = await renderAnalysis(await getBrowser(), webBaseUrl, parsed);
+    const activeBrowser = await getBrowser();
     if (url.pathname === "/inspect") {
-      json(response, 200, result.metadata);
+      json(response, 200, await inspectAnalysis(activeBrowser, webBaseUrl, parsed));
       return;
     }
-    const compactMetadata = {
-      documentId: result.metadata.documentId,
-      candleHash: result.metadata.candleHash,
-      annotationCount: result.metadata.annotationCount,
-      renderedDrawingCount: result.metadata.renderedDrawingIds.length,
-      visibleDrawingCount: result.metadata.visibleDrawingIds.length,
-      clippedDrawingCount: result.metadata.clippedDrawingIds.length,
-      renderedProfileBins: result.metadata.renderedProfileBins,
-      viewportFrom: result.metadata.viewportFrom,
-      viewportTo: result.metadata.viewportTo,
-    };
-    const encodedMetadata = Buffer.from(JSON.stringify(compactMetadata)).toString("base64url");
+    const result = await renderAnalysis(activeBrowser, webBaseUrl, parsed);
     response.writeHead(200, {
       "content-type": "image/png",
       "content-length": result.image.length,
       "cache-control": "no-store",
-      "x-unimarket-render-metadata": encodedMetadata,
+      "x-unimarket-annotation-count": String(result.metadata.annotationCount),
       "x-unimarket-drawing-count": String(result.metadata.renderedDrawingIds.length),
       "x-unimarket-visible-drawing-count": String(result.metadata.visibleDrawingIds.length),
       "x-unimarket-clipped-drawing-count": String(result.metadata.clippedDrawingIds.length),
-      "x-unimarket-candle-hash": result.metadata.candleHash ?? ""
+      "x-unimarket-profile-bin-count": String(result.metadata.renderedProfileBins),
+      "x-unimarket-candle-hash": result.metadata.candleHash ?? "",
     });
     response.end(result.image);
   } catch (error) {
     json(response, 502, {
       error: {
         code: "RENDER_FAILED",
-        message: error instanceof Error ? error.message : "Unknown render failure"
-      }
+        message: error instanceof Error ? error.message : "Unknown render failure",
+      },
     });
   } finally {
     activeRenders -= 1;

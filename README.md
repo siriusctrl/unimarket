@@ -178,7 +178,7 @@ Example response shape:
 
 ### Chart Analysis Documents
 
-The Analysis Workspace lives at `/analysis/:market/:reference`. Agents consume `GET /api/analysis/context`, choose their own candle interval, history range, focused viewport, and drawing set, then submit a provider-neutral `unimarket.chart-analysis/v1` JSON document. Drawings use market coordinates such as `{ time, price }`; the platform never stores generated JavaScript or canvas pixels. Each interval has its own document stream so daily analysis is never silently reused on weekly candles. Drafts can be updated, while published revisions are immutable. Analysis reads are public for browser preview, so documents must not contain secrets.
+The Analysis Workspace lives at `/analysis/:market/:reference`. Agents consume `GET /api/analysis/context`, choose their own candle interval, history range, focused viewport, and drawing set, then submit a provider-neutral `unimarket.chart-analysis/v1` JSON document. Drawings use market coordinates such as `{ time, price }`; the platform never stores generated JavaScript or canvas pixels. Each interval has its own document stream so daily analysis is never silently reused on weekly candles. Draft mutations increment an explicit revision counter, while published documents are immutable. Analysis reads are public for browser preview, so documents must not contain secrets.
 
 ```bash
 GET  /api/analysis/schema
@@ -188,7 +188,7 @@ POST /api/analysis/documents/:id/publish
 GET  /api/analysis/documents/:id/render-metadata
 ```
 
-Run `pnpm dev:renderer` beside the deployed web app to start the reusable image service on localhost port `3101`. A model can call `GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=<draft-id>` repeatedly while updating the same draft; Playwright stays warm between requests. `analysis-image-url`, `analysis-inspect`, and `analysis-render` expose image plus visibility/clipping metadata through the agent helper. Set `HOST` only when exposing the service behind a trusted gateway, and tune the bounded queue with `UNIMARKET_RENDER_CONCURRENCY`.
+Run `pnpm dev:renderer` beside the deployed web app to start the reusable image service on localhost port `3101`. A model can call `GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=<draft-id>` repeatedly while updating the same draft; Playwright stays warm between requests. `analysis-render` writes the image, while `analysis-inspect` reads full projection metadata without taking and discarding a screenshot. Set `HOST` only when exposing the service behind a trusted gateway, and tune bounded concurrency with `UNIMARKET_RENDER_CONCURRENCY`.
 
 The intended loop is `context → draft → image → visual critique → update → image → publish`. DOM counts and browser-error checks are only smoke tests; the model must actually inspect the returned image before claiming that a trend line or channel makes visual sense.
 

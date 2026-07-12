@@ -22,22 +22,20 @@ export const useAnalysisWorkspace = ({
   const [selectedDocument, setSelectedDocument] = useState<StoredChartAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const requestGeneration = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
-    const generation = requestGeneration.current + 1;
-    requestGeneration.current = generation;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setLoading(true);
     setError(null);
-    setContext(null);
-    setDocuments([]);
-    setSelectedDocument(null);
     try {
-      const listed = await client.listDocuments({ market, reference, interval });
+      const listed = await client.listDocuments({ market, reference, interval }, controller.signal);
       let selected = documentId
         ? listed.documents.find((document) => document.id === documentId)
         : listed.documents.find((document) => document.status === "published") ?? listed.documents[0];
-      if (documentId && !selected) selected = await client.getDocument(documentId);
+      if (documentId && !selected) selected = await client.getDocument(documentId, controller.signal);
       if (selected && (
         selected.document.instrument.market !== market || selected.document.instrument.reference !== reference
       )) {
@@ -53,25 +51,25 @@ export const useAnalysisWorkspace = ({
         interval: contextInterval,
         lookback,
         documentId: selected?.id,
-      });
-      if (requestGeneration.current !== generation) return;
+      }, controller.signal);
       setContext(nextContext);
       setDocuments(nextDocuments);
       setSelectedDocument(selected ?? null);
       setError(null);
     } catch (nextError) {
-      if (requestGeneration.current !== generation) return;
+      if (controller.signal.aborted) return;
       setError(nextError instanceof Error ? nextError.message : "Analysis workspace could not be loaded");
     } finally {
-      if (requestGeneration.current === generation) setLoading(false);
+      if (activeRequest.current === controller) setLoading(false);
     }
   }, [client, documentId, interval, lookback, market, reference]);
 
   useEffect(() => {
+    setContext(null);
+    setDocuments([]);
+    setSelectedDocument(null);
     void refresh();
-    return () => {
-      requestGeneration.current += 1;
-    };
+    return () => activeRequest.current?.abort();
   }, [refresh]);
 
   return {

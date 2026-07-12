@@ -56,6 +56,11 @@ const drawingMetadataShape = {
 const distinctAnchors = <T extends { time: string; price: number }[]>(anchors: T): boolean =>
   new Set(anchors.map((anchor) => `${anchor.time}:${anchor.price}`)).size === anchors.length;
 
+const pricesEqual = (left: number, right: number): boolean => {
+  const scale = Math.max(1, Math.abs(left), Math.abs(right));
+  return Math.abs(left - right) <= Number.EPSILON * scale * 8;
+};
+
 const orderedAnchorsSchema = z.tuple([chartPointSchema, chartPointSchema])
   .refine(distinctAnchors, "anchors must be distinct")
   .refine(([first, second]) => Date.parse(first.time) < Date.parse(second.time), "anchor times must increase");
@@ -99,7 +104,7 @@ const channelSchema = z.object({
   const timeRatio = (Date.parse(channel.parallelAnchor.time) - Date.parse(first.time)) /
     (Date.parse(second.time) - Date.parse(first.time));
   const basePriceAtAnchor = first.price + (second.price - first.price) * timeRatio;
-  if (Math.abs(channel.parallelAnchor.price - basePriceAtAnchor) < 1e-8) {
+  if (pricesEqual(channel.parallelAnchor.price, basePriceAtAnchor)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["parallelAnchor"], message: "parallel anchor must define a non-zero channel width" });
   }
 });
@@ -251,7 +256,10 @@ export const createAnalysisDocumentSchema = z.object({
   supersedesId: identifierSchema.optional(),
 }).strict();
 
-export const updateAnalysisDocumentSchema = createAnalysisDocumentSchema;
+export const updateAnalysisDocumentSchema = z.object({
+  document: chartAnalysisDocumentSchema,
+  reasoning: z.string().trim().min(1).max(2_000),
+}).strict();
 
 export const publishAnalysisDocumentSchema = z.object({
   reasoning: z.string().trim().min(1).max(2_000),

@@ -6,6 +6,7 @@ import {
   buildDrawingRenderMetadata,
   chartAnalysisDocumentSchema,
   computeIndicators,
+  updateAnalysisDocumentSchema,
   type AnalysisCandle,
 } from "../src/index.js";
 
@@ -62,6 +63,11 @@ describe("chart analysis protocol", () => {
     expect(chartAnalysisDocumentSchema.safeParse({
       ...document,
       layers: [...document.layers, { ...document.layers[1] }],
+    }).success).toBe(false);
+    expect(updateAnalysisDocumentSchema.safeParse({
+      document,
+      reasoning: "Update the draft",
+      supersedesId: "ana_previous",
     }).success).toBe(false);
   });
 

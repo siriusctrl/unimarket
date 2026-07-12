@@ -307,6 +307,7 @@ export const chartAnalyses = sqliteTable(
     id: text("id").primaryKey(),
     supersedesId: text("supersedes_id"),
     version: integer("version").notNull(),
+    revision: integer("revision").notNull().default(1),
     status: text("status").notNull(),
     market: text("market").notNull(),
     reference: text("reference").notNull(),

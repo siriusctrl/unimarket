@@ -142,7 +142,7 @@ Document writes use `unimarket.chart-analysis/v1`. Supported drawings are `horiz
 
 Drawing labels may set `labelPlacement.at` to `start`, `middle`, or `end` with bounded `offsetX` and `offsetY`. Marker shapes render distinctly as `circle`, `diamond`, `arrowUp`, or `arrowDown`.
 
-Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`. The API derives `metadata.createdBy`, `metadata.createdAt`, and the database audit envelope from the authenticated request; model-supplied `runId` remains opaque provenance. It rejects mismatched candle hashes, cross-interval revisions, instrument or interval changes on a draft, and every update to a published document.
+Create bodies contain `document`, non-empty `reasoning`, and optional `supersedesId`; update bodies contain only `document` and `reasoning`. The API derives `metadata.createdBy`, `metadata.createdAt`, and the database audit envelope from the authenticated request; model-supplied `runId` remains opaque provenance. Stored responses expose lineage `version` separately from the `revision` counter used for atomic draft mutation. The API rejects mismatched candle hashes, cross-interval revisions, instrument or interval changes on a draft, concurrent writes against an older revision, and every update to a published document.
 
 Analysis reads, including drafts, are intentionally public so a deployed renderer can preview an exact `documentId` before publication. Do not place credentials or private research in an analysis document.
 
@@ -157,7 +157,7 @@ GET /render?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example&scope=c
 GET /inspect?market=hyperliquid&reference=xyz%3AMU&documentId=ana_example&scope=chart&theme=dark
 ```
 
-`/render` returns `image/png`; its compact `X-Unimarket-Render-Metadata` header contains hashes and counts without risking proxy header limits. `/inspect` returns full JSON including rendered, visible, and clipped drawing IDs. `scope` is `chart` or `page`; optional `width` and `height` control the browser viewport. The service binds to localhost by default, limits concurrent renders, returns `429 RENDER_BUSY` under pressure, and reports browser health through `/health`.
+`/render` returns `image/png` with bounded `X-Unimarket-*` headers for the candle hash and annotation, rendered, visible, clipped, and profile-bin counts. `/inspect` performs the same browser projection without taking a screenshot and returns full JSON including rendered, visible, and clipped drawing IDs. `scope` is `chart` or `page`; optional `width` and `height` control the browser viewport. The service binds to localhost by default, limits concurrent renders, returns `429 RENDER_BUSY` under pressure, and reports browser health through `/health`.
 
 ### Search and browse contract
 

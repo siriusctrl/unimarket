@@ -214,7 +214,7 @@ POST /api/analysis/documents/{id}/publish
 GET /api/analysis/documents/{id}/render-metadata
 ```
 
-Documents use `unimarket.chart-analysis/v1`. Drawings use time-price coordinates and indicator layers store deterministic calculation parameters. Documents are interval-specific and may contain multiple drawing layers plus a focused viewport inside the full candle snapshot. Create/update bodies wrap the document with non-empty `reasoning`; create may include `supersedesId`. Published revisions are immutable.
+Documents use `unimarket.chart-analysis/v1`. Drawings use time-price coordinates and indicator layers store deterministic calculation parameters. Documents are interval-specific and may contain multiple drawing layers plus a focused viewport inside the full candle snapshot. Create/update bodies wrap the document with non-empty `reasoning`; only create may include `supersedesId`. Draft mutations increment `revision`; published documents are immutable.
 
 Use `labelPlacement` when multiple structures would otherwise collide, and choose the explicit marker shape that matches the intended annotation.
 

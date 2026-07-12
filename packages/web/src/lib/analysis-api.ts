@@ -15,15 +15,18 @@ export const createAnalysisApiClient = () => ({
     interval: string;
     lookback: string;
     documentId?: string;
-  }) => requestJson<ChartContext>(
+  }, signal?: AbortSignal) => requestJson<ChartContext>(
     `/api/analysis/context?market=${encodeURIComponent(market)}&reference=${encodeURIComponent(reference)}&interval=${encodeURIComponent(interval)}&lookback=${encodeURIComponent(lookback)}${documentId ? `&documentId=${encodeURIComponent(documentId)}` : ""}`,
+    { init: { signal } },
   ),
-  listDocuments: ({ market, reference, interval }: { market: string; reference: string; interval: string }) =>
+  listDocuments: ({ market, reference, interval }: { market: string; reference: string; interval: string }, signal?: AbortSignal) =>
     requestJson<{ documents: StoredChartAnalysis[] }>(
       `/api/analysis/documents?market=${encodeURIComponent(market)}&reference=${encodeURIComponent(reference)}&interval=${encodeURIComponent(interval)}&limit=20`,
+      { init: { signal } },
     ),
-  getDocument: (id: string) => requestJson<StoredChartAnalysis>(
+  getDocument: (id: string, signal?: AbortSignal) => requestJson<StoredChartAnalysis>(
     `/api/analysis/documents/${encodeURIComponent(id)}`,
+    { init: { signal } },
   ),
 });
 

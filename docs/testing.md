@@ -80,7 +80,7 @@ Run the opt-in network check when changing chart context, Hyperliquid history, a
 pnpm verify:analysis-live
 ```
 
-The script starts isolated API, Vite, and persistent renderer processes, fetches live `xyz:MU` daily candles from Hyperliquid, creates a model-neutral draft, inspects and renders that exact snapshot, checks visible/clipped drawings plus volume-profile bins, then publishes and writes JSON/screenshot evidence under `artifacts/analysis/<timestamp>/`.
+The script starts isolated API, Vite, and persistent renderer processes, fetches live `xyz:MU` daily candles from Hyperliquid, creates a model-neutral draft, and renders that exact snapshot once. It validates the candle hash plus visible, clipped, and volume-profile counts from bounded response headers, then publishes and writes JSON, screenshot, and per-service logs under `artifacts/analysis/<timestamp>/`.
 
 This remains a transport and rendering smoke test. Human or model image inspection is required to judge whether the selected viewport, pivots, lines, channels, and labels make technical sense.
 

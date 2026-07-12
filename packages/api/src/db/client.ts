@@ -251,6 +251,7 @@ const migrationStatements = [
     id TEXT PRIMARY KEY,
     supersedes_id TEXT,
     version INTEGER NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL,
     market TEXT NOT NULL,
     reference TEXT NOT NULL,
@@ -273,6 +274,7 @@ const migrationStatements = [
 const additiveMigrationStatements = [
   `ALTER TABLE order_execution_params ADD COLUMN taker_fee_rate REAL NOT NULL DEFAULT 0`,
   `ALTER TABLE trades ADD COLUMN fee REAL NOT NULL DEFAULT 0`,
+  `ALTER TABLE chart_analyses ADD COLUMN revision INTEGER NOT NULL DEFAULT 1`,
 ];
 
 const isDuplicateColumnError = (error: unknown): boolean => {

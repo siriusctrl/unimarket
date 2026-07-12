@@ -10,9 +10,11 @@ import {
 import type { MarketRegistry, PriceHistoryInterval, PriceHistoryLookback } from "@unimarket/markets";
 import { createHash } from "node:crypto";
 
-import type { chartAnalyses } from "../db/schema.js";
+import type { ChartAnalysisRow } from "./chart-analysis-repository.js";
 
-type ChartAnalysisRow = typeof chartAnalyses.$inferSelect;
+type ChartContextRange =
+  | { mode: "lookback"; lookback: PriceHistoryLookback; asOf?: string }
+  | { mode: "custom"; startTime: string; endTime: string };
 
 const countMissingIntervals = (timestamps: string[], expectedIntervalMs: number): number => {
   if (timestamps.length < 2 || expectedIntervalMs <= 0) return 0;
@@ -56,29 +58,23 @@ export const buildChartContext = async ({
   market,
   reference,
   interval,
-  lookback,
-  asOf,
-  startTime,
-  endTime,
+  range,
   indicatorLayers,
 }: {
   registry: MarketRegistry;
   market: string;
   reference: string;
   interval: PriceHistoryInterval;
-  lookback: PriceHistoryLookback;
-  asOf?: string;
-  startTime?: string;
-  endTime?: string;
+  range: ChartContextRange;
   indicatorLayers?: IndicatorLayer[];
 }): Promise<ChartContext> => {
   const adapter = registry.get(market);
   if (!adapter) throw new Error(`Market not found: ${market}`);
   if (!adapter.getPriceHistory) throw new Error(`Market does not support price history: ${market}`);
 
-  const history = await adapter.getPriceHistory(reference, startTime && endTime
-    ? { interval, startTime, endTime }
-    : { interval, lookback, asOf });
+  const history = await adapter.getPriceHistory(reference, range.mode === "custom"
+    ? { interval, startTime: range.startTime, endTime: range.endTime }
+    : { interval, lookback: range.lookback, asOf: range.asOf });
   const candles = history.candles.map((candle) => ({ ...candle }));
   const snapshotHash = `sha256:${createHash("sha256").update(JSON.stringify(candles)).digest("hex")}`;
   const indicators = computeIndicators(
@@ -133,6 +129,7 @@ export const parseStoredChartAnalysis = (row: ChartAnalysisRow): StoredChartAnal
     id: row.id,
     supersedesId: row.supersedesId,
     version: row.version,
+    revision: row.revision,
     status: row.status,
     document: chartAnalysisDocumentSchema.parse(JSON.parse(row.document)),
     createdBy: row.createdBy,

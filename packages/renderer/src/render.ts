@@ -1,32 +1,36 @@
-import type { Browser } from "playwright";
+import type { Browser, Locator, Page } from "playwright";
 
 import { buildAnalysisUrl, type AnalysisRenderRequest } from "./request.js";
 
-export type AnalysisRenderResult = {
-  image: Buffer;
-  metadata: {
-    documentId: string;
-    targetUrl: string;
-    candleHash: string | null;
-    annotationCount: number;
-    renderedDrawingIds: string[];
-    visibleDrawingIds: string[];
-    clippedDrawingIds: string[];
-    renderedProfileBins: number;
-    viewportFrom: string | null;
-    viewportTo: string | null;
-    browserErrors: string[];
-  };
+export type AnalysisRenderMetadata = {
+  documentId: string;
+  targetUrl: string;
+  candleHash: string | null;
+  annotationCount: number;
+  renderedDrawingIds: string[];
+  visibleDrawingIds: string[];
+  clippedDrawingIds: string[];
+  renderedProfileBins: number;
+  viewportFrom: string | null;
+  viewportTo: string | null;
+  browserErrors: string[];
 };
 
-export const renderAnalysis = async (
+type ReadyAnalysis = {
+  page: Page;
+  chart: Locator;
+  metadata: AnalysisRenderMetadata;
+};
+
+const withReadyAnalysis = async <T>(
   browser: Browser,
   webBaseUrl: string,
-  request: AnalysisRenderRequest
-): Promise<AnalysisRenderResult> => {
+  request: AnalysisRenderRequest,
+  consume: (analysis: ReadyAnalysis) => Promise<T>,
+): Promise<T> => {
   const page = await browser.newPage({
     viewport: { width: request.width, height: request.height },
-    colorScheme: request.theme
+    colorScheme: request.theme,
   });
   const browserErrors: string[] = [];
   page.on("console", (message) => {
@@ -47,9 +51,8 @@ export const renderAnalysis = async (
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     }));
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(500);
 
-    const metadata = await chart.evaluate((element) => ({
+    const projected = await chart.evaluate((element) => ({
       candleHash: element.getAttribute("data-candle-hash"),
       annotationCount: Number(element.getAttribute("data-annotation-count") ?? 0),
       renderedDrawingIds: Array.from(element.querySelectorAll("[data-drawing-id]"))
@@ -59,18 +62,34 @@ export const renderAnalysis = async (
       clippedDrawingIds: JSON.parse(element.getAttribute("data-clipped-drawing-ids") ?? "[]") as string[],
       renderedProfileBins: element.querySelectorAll("[data-profile-bin]").length,
       viewportFrom: element.getAttribute("data-viewport-from"),
-      viewportTo: element.getAttribute("data-viewport-to")
+      viewportTo: element.getAttribute("data-viewport-to"),
     }));
     if (browserErrors.length > 0) throw new Error(`Rendered page emitted browser errors: ${browserErrors.join(" | ")}`);
-    const image = request.scope === "page"
-      ? await page.screenshot({ fullPage: true, animations: "allow", type: "png" })
-      : await chart.screenshot({ animations: "allow", type: "png" });
-
-    return {
-      image,
-      metadata: { documentId: request.documentId, targetUrl, ...metadata, browserErrors }
-    };
+    return await consume({
+      page,
+      chart,
+      metadata: { documentId: request.documentId, targetUrl, ...projected, browserErrors },
+    });
   } finally {
     await page.close();
   }
 };
+
+export const inspectAnalysis = (
+  browser: Browser,
+  webBaseUrl: string,
+  request: AnalysisRenderRequest,
+): Promise<AnalysisRenderMetadata> =>
+  withReadyAnalysis(browser, webBaseUrl, request, async ({ metadata }) => metadata);
+
+export const renderAnalysis = (
+  browser: Browser,
+  webBaseUrl: string,
+  request: AnalysisRenderRequest,
+): Promise<{ image: Buffer; metadata: AnalysisRenderMetadata }> =>
+  withReadyAnalysis(browser, webBaseUrl, request, async ({ page, chart, metadata }) => ({
+    image: request.scope === "page"
+      ? await page.screenshot({ fullPage: true, animations: "allow", type: "png" })
+      : await chart.screenshot({ animations: "allow", type: "png" }),
+    metadata,
+  }));
