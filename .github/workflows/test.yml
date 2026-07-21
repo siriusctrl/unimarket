@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [analysis, core, markets, api, renderer]
+        package: [analysis, core, markets, api, renderer, web]
 
     steps:
       - uses: actions/checkout@v4
