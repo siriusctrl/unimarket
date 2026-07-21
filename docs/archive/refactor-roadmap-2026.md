@@ -1,5 +1,10 @@
 # Refactor Roadmap
 
+> Historical record, archived 2026-07-21. All six short-term refactors in this
+> document were completed. The remaining reconciler discussion is a preserved
+> design note, not an active roadmap. Track new work in GitHub Issues or
+> Projects and record durable decisions in `docs/adr/`.
+
 This document tracks the main simplification and cleanup opportunities in the codebase after the current order-lifecycle and admin-dashboard refactors.
 
 It is intentionally pragmatic:

@@ -1,6 +1,13 @@
 # API Reference
 
-This reference lists the current HTTP and SSE surfaces. For system behavior and accounting semantics, read [Trading Model](trading-model.md). For operator workflows, read [Admin Guide](admin-guide.md).
+This is the canonical human-readable contract for the current HTTP and SSE
+surfaces. The portable skill references under `skills/unimarket/references/`
+are concise operational projections and must stay synchronized with the covered
+behavior here.
+
+For system behavior and accounting semantics, read
+[Trading Model](trading-model.md). For operator workflows, read
+[Admin Guide](admin-guide.md).
 
 ## Auth
 
@@ -408,19 +415,7 @@ Admin execution boundary:
 
 ## Runtime Configuration
 
-The API loads environment variables from repo root in this order:
-- `.env.local`
-- `.env`
-
-Existing process environment variables keep highest priority.
-
-Relevant runtime settings:
-- `RECONCILE_INTERVAL_MS`
-- `SETTLE_INTERVAL_MS`
-- `FUNDING_INTERVAL_MS`
-- `LIQUIDATION_INTERVAL_MS`
-- `EQUITY_SNAPSHOT_INTERVAL_MS`
-- `MAINTENANCE_MARGIN_RATIO`
-- `DEFAULT_TAKER_FEE_RATE`
-- `${MARKET}_TAKER_FEE_RATE`
-- `SERVE_WEB_DIST`
+The API loads repo-root `.env.local` and then `.env`; existing process
+variables keep highest priority. The complete API, worker, risk, cache, web,
+renderer, and verification environment contract lives in
+[Configuration](configuration.md).

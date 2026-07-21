@@ -126,168 +126,28 @@ Coverage targets:
 
 ## One-Command Smoke Playbook
 
-Requirements: `curl`, `jq`, API at `http://localhost:3100`.
+The smoke workflow now lives in `scripts/smoke-api.sh` so documentation and the
+executable check cannot drift. It requires `curl`, `jq`, a running API, and live
+public market connectivity.
 
 ```bash
-set -euo pipefail
-
-BASE_URL="${BASE_URL:-http://localhost:3100}"
-ADMIN_API_KEY="${ADMIN_API_KEY:-}"
-
-need() { command -v "$1" >/dev/null || { echo "missing required command: $1"; exit 1; }; }
-need curl
-need jq
-
-auth_get() {
-  curl -sS "$BASE_URL$1" -H "Authorization: Bearer $API_KEY"
-}
-
-auth_post() {
-  curl -sS -X POST "$BASE_URL$1" \
-    -H "Authorization: Bearer $API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$2"
-}
-
-auth_delete() {
-  curl -sS -X DELETE "$BASE_URL$1" \
-    -H "Authorization: Bearer $API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$2"
-}
-
-admin_get() {
-  curl -sS "$BASE_URL$1" -H "Authorization: Bearer $ADMIN_API_KEY"
-}
-
-admin_post() {
-  curl -sS -X POST "$BASE_URL$1" \
-    -H "Authorization: Bearer $ADMIN_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$2"
-}
-
-echo "[1/8] Register user"
-USER_NAME="agent-e2e-$(date +%s)"
-REGISTER_PAYLOAD="$(curl -sS -X POST "$BASE_URL/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d "{\"userName\":\"$USER_NAME\"}")"
-
-API_KEY="$(jq -r '.apiKey // empty' <<<"$REGISTER_PAYLOAD")"
-USER_ID="$(jq -r '.userId // empty' <<<"$REGISTER_PAYLOAD")"
-ACCOUNT_ID="$(jq -r '.account.id // empty' <<<"$REGISTER_PAYLOAD")"
-[[ -n "$API_KEY" && -n "$USER_ID" && -n "$ACCOUNT_ID" ]] || {
-  echo "register failed: $REGISTER_PAYLOAD"
-  exit 1
-}
-
-echo "[2/8] Discover markets + capability endpoints"
-MARKETS_PAYLOAD="$(auth_get "/api/markets")"
-jq -e '.markets | length > 0' <<<"$MARKETS_PAYLOAD" >/dev/null
-
-TRADE_MARKET=""
-TRADE_SYMBOL=""
-while read -r MARKET_ID; do
-  [[ -n "$MARKET_ID" ]] || continue
-
-  SORT="$(jq -r --arg m "$MARKET_ID" '.markets[] | select(.id == $m) | .browseOptions[0].value // empty' <<<"$MARKETS_PAYLOAD")"
-  BROWSE_URL="/api/markets/$MARKET_ID/browse?limit=1"
-  if [[ -n "$SORT" ]]; then
-    BROWSE_URL="$BROWSE_URL&sort=$SORT"
-  fi
-  BROWSE_PAYLOAD="$(auth_get "$BROWSE_URL")"
-  REFERENCE="$(jq -r '.results[0].reference // empty' <<<"$BROWSE_PAYLOAD")"
-  [[ -n "$REFERENCE" ]] || continue
-
-  CAPS="$(jq -r --arg m "$MARKET_ID" '.markets[] | select(.id == $m) | .capabilities[]?' <<<"$MARKETS_PAYLOAD")"
-  if grep -qx "quote" <<<"$CAPS"; then
-    auth_get "/api/markets/$MARKET_ID/quote?reference=$REFERENCE" >/dev/null
-  fi
-  if grep -qx "orderbook" <<<"$CAPS"; then
-    auth_get "/api/markets/$MARKET_ID/orderbook?reference=$REFERENCE" >/dev/null
-  fi
-  if grep -qx "funding" <<<"$CAPS"; then
-    auth_get "/api/markets/$MARKET_ID/funding?reference=$REFERENCE" >/dev/null
-  fi
-  if grep -qx "resolve" <<<"$CAPS"; then
-    auth_get "/api/markets/$MARKET_ID/resolve?reference=$REFERENCE" >/dev/null
-  fi
-
-  if [[ -z "$TRADE_MARKET" ]]; then
-    TRADE_MARKET="$MARKET_ID"
-    TRADE_SYMBOL="$REFERENCE"
-  fi
-done < <(jq -r '.markets[].id' <<<"$MARKETS_PAYLOAD")
-
-[[ -n "$TRADE_MARKET" && -n "$TRADE_SYMBOL" ]] || {
-  echo "no tradeable reference found"
-  exit 1
-}
-
-echo "[3/8] Place market order"
-MARKET_ORDER_PAYLOAD="$(auth_post "/api/orders" "$(jq -nc \
-  --arg m "$TRADE_MARKET" \
-  --arg s "$TRADE_SYMBOL" \
-  '{market:$m,reference:$s,side:"buy",type:"market",quantity:1,reasoning:"e2e smoke: open starter position"}'
-)")"
-MARKET_ORDER_ID="$(jq -r '.id // empty' <<<"$MARKET_ORDER_PAYLOAD")"
-[[ -n "$MARKET_ORDER_ID" ]] || { echo "market order failed: $MARKET_ORDER_PAYLOAD"; exit 1; }
-
-echo "[4/8] Place and cancel pending limit order"
-LIMIT_ORDER_PAYLOAD="$(auth_post "/api/orders" "$(jq -nc \
-  --arg m "$TRADE_MARKET" \
-  --arg s "$TRADE_SYMBOL" \
-  '{market:$m,reference:$s,side:"sell",type:"limit",quantity:1,limitPrice:0.99,reasoning:"e2e smoke: pending order for cancel flow"}'
-)")"
-LIMIT_ORDER_ID="$(jq -r '.id // empty' <<<"$LIMIT_ORDER_PAYLOAD")"
-[[ -n "$LIMIT_ORDER_ID" ]] || { echo "limit order failed: $LIMIT_ORDER_PAYLOAD"; exit 1; }
-
-auth_get "/api/orders/$LIMIT_ORDER_ID" >/dev/null
-auth_get "/api/orders?view=open" >/dev/null
-auth_get "/api/orders?view=history" >/dev/null
-
-CANCEL_PAYLOAD="$(auth_delete "/api/orders/$LIMIT_ORDER_ID" '{"reasoning":"e2e smoke: thesis invalidated"}')"
-jq -e '.status == "cancelled"' <<<"$CANCEL_PAYLOAD" >/dev/null
-
-echo "[5/8] Journal + account endpoints"
-auth_post "/api/journal" '{"content":"e2e smoke note","tags":["e2e","smoke"]}' >/dev/null
-auth_get "/api/journal?limit=5&offset=0" >/dev/null
-auth_get "/api/account" >/dev/null
-auth_get "/api/account/portfolio" >/dev/null
-auth_get "/api/positions" >/dev/null
-
-TIMELINE_PAYLOAD="$(auth_get "/api/account/timeline?limit=50&offset=0")"
-jq -e '.events | any(.type == "order.cancelled")' <<<"$TIMELINE_PAYLOAD" >/dev/null
-
-echo "[6/8] Reconciler is background-only"
-
-echo "[7/8] Negative checks"
-LEGACY_REGISTER_CODE="$(curl -sS -o /tmp/unimarket-legacy-register.out -w "%{http_code}" \
-  -X POST "$BASE_URL/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"legacy-field-should-fail"}')"
-[[ "$LEGACY_REGISTER_CODE" == "400" ]] || { echo "expected 400 for legacy register field"; exit 1; }
-
-MISSING_REASONING_CODE="$(curl -sS -o /tmp/unimarket-missing-reasoning.out -w "%{http_code}" \
-  -X POST "$BASE_URL/api/orders" \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{\"market\":\"$TRADE_MARKET\",\"reference\":\"$TRADE_SYMBOL\",\"side\":\"buy\",\"type\":\"market\",\"quantity\":1}")"
-[[ "$MISSING_REASONING_CODE" == "400" ]] || { echo "expected 400 for missing reasoning"; exit 1; }
-
-echo "[8/8] Dashboard and optional admin checks"
-curl -sS "$BASE_URL/api/dashboard/users/$USER_ID/timeline?limit=20&offset=0" >/dev/null
-curl -sS "$BASE_URL/api/dashboard/overview" >/dev/null
-curl -sS "$BASE_URL/api/dashboard/equity-history?range=1w" >/dev/null
-
-if [[ -n "$ADMIN_API_KEY" ]]; then
-  admin_post "/api/admin/users/$USER_ID/deposit" '{"amount":100}' >/dev/null
-  admin_post "/api/admin/users/$USER_ID/withdraw" '{"amount":100}' >/dev/null
-  admin_get "/api/admin/users/$USER_ID/portfolio" >/dev/null
-fi
-
-echo "E2E smoke passed."
+corepack pnpm smoke:api
 ```
+
+Use a non-default API or include protected admin checks with:
+
+```bash
+BASE_URL=http://localhost:3200 \
+ADMIN_API_KEY=your-secret-key \
+corepack pnpm smoke:api
+```
+
+The script registers a temporary user, discovers a live tradeable reference,
+reads advertised capabilities, uses the adapter's minimum quantity, places one
+market order, places and cancels a non-marketable limit order, checks account
+and timeline reads, verifies negative contracts, and optionally exercises admin
+deposit/withdraw/read behavior. It removes its temporary response files, while
+the created paper-trading records remain in the configured database.
 
 ## SSE Check
 

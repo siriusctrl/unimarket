@@ -1,5 +1,10 @@
 # Unimarket API Reference
 
+This is the portable agent-facing projection of the API. The repository's
+`docs/api-reference.md` is the canonical human-readable contract; keep this
+file concise and synchronize it whenever covered endpoints or response shapes
+change.
+
 ## Contents
 - [Conventions](#conventions)
 - [Discovery](#discovery)
