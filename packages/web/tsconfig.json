@@ -6,9 +6,9 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "types": ["vite/client", "node"],
-    "baseUrl": ".",
+    "rootDir": "../..",
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["./src/*"],
       "@unimarket/core": ["../core/src/index.ts"]
     },
     "noEmit": true
