@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { AgentRoster } from "../components/dashboard/AgentRoster";
 import { EquityTrend } from "../components/dashboard/EquityTrend";
+import { OperationalStatus, PortfolioSummary } from "../components/dashboard/PortfolioOverview";
 import { PredictionLeaderboard } from "../components/dashboard/PredictionLeaderboard";
 import { LoadingState } from "../components/LoadingState";
 import { Button } from "../components/ui/button";
@@ -30,19 +31,19 @@ export const DashboardPage = () => {
   if (loading && !overview) return <LoadingState />;
 
   return (
-    <div className="space-y-6">
-      <header className="border-l-2 border-primary px-1 py-2 sm:px-4">
+    <div className="mx-auto max-w-[1500px] space-y-5">
+      <header className="border-b border-border/70 pb-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="max-w-3xl space-y-2">
-            <p className="text-xs font-medium tracking-wide text-primary">Operator review</p>
-            <h1 className="text-3xl font-bold tracking-[-0.03em] sm:text-4xl">Agent observation console</h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+          <div className="max-w-3xl space-y-1.5 border-l-2 border-primary pl-4">
+            <p className="text-xs font-medium tracking-wide text-primary">Operator review · paper mode</p>
+            <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Agent observation console</h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">
               Paper-market exposure, valuation health, and audited agent decisions.
             </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right text-xs text-muted-foreground">
-              <p className="font-medium">Last snapshot</p>
+              <p className="font-medium text-foreground">Latest snapshot</p>
               <time>{generatedAtLabel}</time>
             </div>
             <Button
@@ -82,18 +83,22 @@ export const DashboardPage = () => {
 
       {overview ? (
         <>
-          <EquityTrend
-            mode={chart.mode}
-            onModeChange={chart.setMode}
-            range={range}
-            onRangeChange={setRange}
-            loading={history.loading}
-            rows={chart.rows}
-            domain={chart.domain}
-            agentNames={chart.agentNames}
-            selectedAgents={chart.selectedAgents}
-            colors={chart.colors}
-          />
+          <PortfolioSummary overview={overview} />
+          <div className="grid items-stretch gap-5 xl:grid-cols-[minmax(0,1fr)_21rem]">
+            <EquityTrend
+              mode={chart.mode}
+              onModeChange={chart.setMode}
+              range={range}
+              onRangeChange={setRange}
+              loading={history.loading}
+              rows={chart.rows}
+              domain={chart.domain}
+              agentNames={chart.agentNames}
+              selectedAgents={chart.selectedAgents}
+              colors={chart.colors}
+            />
+            <OperationalStatus overview={overview} />
+          </div>
           <PredictionLeaderboard
             rows={overview.predictionLeaderboard}
             onOpenAgent={(userId) => navigate(`/agents/${userId}`)}

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { analysisDocumentsFixture, mockDashboardApi } from "./fixtures/dashboard.mjs";
+import { analysisDocumentsFixture, mockDashboardApi, overviewFixture } from "./fixtures/dashboard.mjs";
 
 const browserErrorsByPage = new WeakMap();
 const apiCallsByPage = new WeakMap();
@@ -24,6 +24,9 @@ test.beforeEach(async ({ page }) => {
 
 test("operator can inspect the deterministic dashboard and agent audit trail", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Agent observation console" })).toBeVisible();
+  await expect(page.getByText("Paper portfolio", { exact: true })).toBeVisible();
+  await expect(page.getByText("$462,145.00", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "System posture" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Equity trend" })).toBeVisible();
   await expect(page.getByText("Atlas Alpha").first()).toBeVisible();
 
@@ -37,6 +40,11 @@ test("operator can inspect the deterministic dashboard and agent audit trail", a
   await expect(roster.getByText("Sable Quant", { exact: true })).toBeVisible();
   await expect(roster.getByText("Northstar Event", { exact: true })).toHaveCount(0);
   await search.clear();
+
+  const atlasSeriesToggle = page.getByRole("button", { name: "Hide Atlas Alpha on equity chart" });
+  await expect(atlasSeriesToggle).toHaveAttribute("aria-pressed", "true");
+  await atlasSeriesToggle.click();
+  await expect(page.getByRole("button", { name: "Show Atlas Alpha on equity chart" })).toHaveAttribute("aria-pressed", "false");
 
   const overviewCallsBeforeNavigation = apiCallsByPage
     .get(page)
@@ -75,6 +83,32 @@ test("mobile shell keeps navigation usable without page-level overflow", async (
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   expect(browserErrorsByPage.get(page)).toEqual([]);
+});
+
+test("partial valuation is explicit and does not claim completeness", async ({ page }) => {
+  await page.unroute("**/api/dashboard/**");
+  const partialOverview = structuredClone(overviewFixture);
+  partialOverview.totals = {
+    ...partialOverview.totals,
+    marketValue: null,
+    unrealizedPnl: null,
+    equity: null,
+  };
+  partialOverview.valuation = {
+    ...partialOverview.valuation,
+    status: "partial",
+    completeAgents: 3,
+    partialAgents: 1,
+    issueCount: 1,
+    pricedPositions: 3,
+    unpricedPositions: 1,
+  };
+  await mockDashboardApi(page, [], { overview: partialOverview });
+  await page.reload();
+
+  await expect(page.getByText("Valuation partial", { exact: true })).toBeVisible();
+  await expect(page.getByText("75%", { exact: true })).toBeVisible();
+  await expect(page.getByText("Valuation complete", { exact: true })).toHaveCount(0);
 });
 
 test("model-authored MU analysis renders financial data and time-price drawings", async ({ page }) => {

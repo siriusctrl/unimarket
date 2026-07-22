@@ -91,7 +91,7 @@ export const EquityTrend = ({
         </div>
       </div>
     </CardHeader>
-    <CardContent className="h-[340px]">
+    <CardContent className="h-[300px]">
       {loading ? (
         <div className="grid h-full content-end gap-3" aria-label="Loading equity history">
           {["h-9", "h-14", "h-20", "h-28"].map((heightClass) => (

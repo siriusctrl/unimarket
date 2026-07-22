@@ -3,13 +3,12 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import type { AgentView } from "../../lib/dashboard-api";
 import { formatCurrency, formatNumber, formatSignedCurrency } from "../../lib/dashboard";
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 const AGENTS_PER_PAGE = 6;
 
-const AgentCard = ({
+const AgentRow = ({
   agent,
   color,
   selected,
@@ -21,83 +20,86 @@ const AgentCard = ({
   selected: boolean;
   onToggle: () => void;
   onOpen: () => void;
-}) => (
-  <article
-    className={`overflow-hidden rounded-lg border bg-card transition-colors ${selected
-      ? "border-primary/35"
-      : "border-border/45 opacity-65"}`}
-  >
-    <div className="flex">
-      <div
-        className="w-1 shrink-0 transition-opacity duration-200"
-        style={{ backgroundColor: color, opacity: selected ? 1 : 0.3 }}
-      />
-      <div className="min-w-0 flex-1 p-5">
-        <div className="flex items-start justify-between gap-3">
+}) => {
+  const largestExposure = [...agent.positions]
+    .sort((left, right) => (right.marketValue ?? 0) - (left.marketValue ?? 0))[0];
+
+  return (
+    <article className={selected ? "bg-primary/[0.035]" : "bg-card"}>
+      <div className="grid grid-cols-2 items-center gap-4 px-4 py-4 sm:px-5 lg:grid-cols-[minmax(13rem,1.35fr)_minmax(8rem,0.8fr)_minmax(8rem,0.8fr)_minmax(8rem,0.8fr)_minmax(12rem,1.2fr)_auto]">
+        <div className="col-span-2 flex min-w-0 items-start gap-3 lg:col-span-1">
+          <button
+            type="button"
+            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-background transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onToggle}
+            aria-pressed={selected}
+            aria-label={`${selected ? "Hide" : "Show"} ${agent.userName} on equity chart`}
+            title={`${selected ? "Hide" : "Show"} chart series`}
+          >
+            <span
+              className={selected ? "h-2.5 w-2.5 rounded-sm" : "h-2.5 w-2.5 rounded-sm opacity-25"}
+              style={{ backgroundColor: color }}
+            />
+          </button>
           <button
             type="button"
             className="min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={onToggle}
-            aria-pressed={selected}
+            onClick={onOpen}
+            aria-label={`Open ${agent.userName} review`}
           >
-            <h3 className="truncate text-lg font-semibold">{agent.userName}</h3>
-            <p className="font-mono text-xs text-muted-foreground">{agent.userId}</p>
+            <h3 className="truncate font-semibold transition-colors hover:text-primary">{agent.userName}</h3>
+            <p className="truncate font-mono text-xs text-muted-foreground">{agent.userId}</p>
           </button>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Badge variant="outline">{formatNumber(agent.totals.positions)} pos</Badge>
-            {agent.valuation.status === "partial" ? (
-              <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
-                Partial
-              </Badge>
-            ) : null}
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onOpen}>
-              Review
-            </Button>
-          </div>
         </div>
 
-        <dl className="mt-5 grid grid-cols-2 gap-3">
+        <dl className="contents">
           <div>
             <dt className="text-xs text-muted-foreground">Paper equity</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatCurrency(agent.totals.equity)}</dd>
+            <dd className="mt-1 font-mono text-sm font-semibold tabular-nums">{formatCurrency(agent.totals.equity)}</dd>
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Cash reserve</dt>
-            <dd className="text-lg font-semibold tabular-nums">{formatCurrency(agent.balance)}</dd>
+            <dd className="mt-1 font-mono text-sm font-semibold tabular-nums">{formatCurrency(agent.balance)}</dd>
           </div>
-          <div className="col-span-2 flex items-center justify-between border-t border-border/50 pt-2">
+          <div>
             <dt className="text-xs text-muted-foreground">Unrealized PnL</dt>
             <dd className={agent.totals.unrealizedPnl === null
-              ? "font-medium text-muted-foreground"
+              ? "mt-1 font-mono text-sm font-semibold text-muted-foreground"
               : agent.totals.unrealizedPnl >= 0
-                ? "font-medium tabular-nums text-emerald-600 dark:text-emerald-400"
-                : "font-medium tabular-nums text-rose-600 dark:text-rose-400"}
+                ? "mt-1 font-mono text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400"
+                : "mt-1 font-mono text-sm font-semibold tabular-nums text-rose-600 dark:text-rose-400"}
             >
               {formatSignedCurrency(agent.totals.unrealizedPnl)}
             </dd>
           </div>
         </dl>
 
-        {agent.positions.length > 0 ? (
-          <div className="mt-3 space-y-1 border-t border-border/50 pt-3">
-            <p className="text-xs font-medium text-muted-foreground">Largest exposure</p>
-            {agent.positions.slice(0, 3).map((position) => (
-              <div key={`${position.market}:${position.symbol}`} className="flex items-center justify-between gap-3 text-xs">
-                <span className="max-w-[14rem] truncate font-mono text-muted-foreground">
-                  {position.symbolName ?? position.symbol}
-                </span>
-                <span className="shrink-0 font-medium tabular-nums">{formatCurrency(position.marketValue)}</span>
-              </div>
-            ))}
-            {agent.positions.length > 3 ? (
-              <p className="text-xs text-muted-foreground">{agent.positions.length - 3} more positions</p>
-            ) : null}
-          </div>
-        ) : null}
+        <div className="col-span-2 min-w-0 lg:col-span-1">
+          <p className="text-xs text-muted-foreground">Largest marked value</p>
+          {largestExposure ? (
+            <div className="mt-1 flex min-w-0 items-center justify-between gap-3">
+              <span className="truncate text-xs" title={largestExposure.symbolName ?? largestExposure.symbol}>
+                {largestExposure.symbolName ?? largestExposure.symbol}
+              </span>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                {formatCurrency(largestExposure.marketValue)}
+              </span>
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">No open positions</p>
+          )}
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {formatNumber(agent.totals.positions)} positions · {agent.valuation.status === "partial" ? "valuation partial" : "valuation complete"}
+          </p>
+        </div>
+
+        <Button variant="ghost" size="sm" className="col-span-2 h-8 justify-self-start px-2 text-xs lg:col-span-1 lg:justify-self-end" onClick={onOpen}>
+          Review
+        </Button>
       </div>
-    </div>
-  </article>
-);
+    </article>
+  );
+};
 
 export const AgentRoster = ({
   agents,
@@ -160,9 +162,9 @@ export const AgentRoster = ({
         </p>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="overflow-hidden rounded-lg border border-border/70 bg-card shadow-panel divide-y divide-border/60">
             {visibleAgents.map((agent) => (
-              <AgentCard
+              <AgentRow
                 key={agent.userId}
                 agent={agent}
                 color={colors[agent.userName] ?? "hsl(var(--border))"}

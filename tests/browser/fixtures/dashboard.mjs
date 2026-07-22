@@ -544,13 +544,13 @@ export const analysisDocumentsFixture = {
   }],
 };
 
-export async function mockDashboardApi(page, calls = []) {
+export async function mockDashboardApi(page, calls = [], { overview = overviewFixture } = {}) {
   await page.route("**/api/dashboard/**", async (route) => {
     const url = new URL(route.request().url());
     calls.push(`${url.pathname}${url.search}`);
 
     if (url.pathname === "/api/dashboard/overview") {
-      await route.fulfill({ json: overviewFixture });
+      await route.fulfill({ json: overview });
       return;
     }
 
