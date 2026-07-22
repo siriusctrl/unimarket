@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  web:
+  workspace:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -25,5 +25,5 @@ jobs:
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
 
-      - name: Build Web
-        run: corepack pnpm --filter @unimarket/web build
+      - name: Build workspace
+        run: corepack pnpm build

@@ -1,4 +1,4 @@
-name: Lint
+name: Static checks
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  typecheck:
+  static:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -24,4 +24,8 @@ jobs:
 
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm typecheck
+      - name: Documentation links
+        run: corepack pnpm verify:docs
+
+      - name: TypeScript
+        run: corepack pnpm typecheck

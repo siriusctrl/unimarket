@@ -1,44 +1,76 @@
 # Architecture
 
-## System Overview
+## Deployment Topology
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│                           Single Node.js Process                     │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐  │
-│  │ Hono API Server (:3100)                                        │  │
-│  │                                                                │  │
-│  │ /api/*      REST endpoints                                     │  │
-│  │ /api/events Server-Sent Events                                 │  │
-│  │ /*          Optional static frontend hosting                    │  │
-│  └───────────────┬────────────────────────────────────────────────┘  │
-│                  │                                                   │
-│  ┌───────────────▼────────────────────────────────────────────────┐  │
-│  │ Application Layer                                              │  │
-│  │ auth · routes · validation · idempotency · event fan-out       │  │
-│  └───────────────┬────────────────────────────────────────────────┘  │
-│                  │                                                   │
-│  ┌───────────────▼────────────────────────────────────────────────┐  │
-│  │ Trading Domain                                                 │  │
-│  │ spot fills · perp fills · PnL · margin · liquidation math      │  │
-│  │ pure and market-agnostic                                        │  │
-│  └───────────────┬────────────────────────────────────────────────┘  │
-│                  │                                                   │
-│  ┌───────────────▼────────────────────────────────────────────────┐  │
-│  │ Market Registry                                                │  │
-│  │ Polymarket · Hyperliquid · future adapters                     │  │
-│  └───────────────┬────────────────────────────────────────────────┘  │
-│                  │                                                   │
-│  ┌───────────────▼────────────────────────────────────────────────┐  │
-│  │ SQLite + Drizzle                                               │  │
-│  │ accounts · orders · trades · positions · funding · liquidations│  │
-│  └────────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  Background workers: reconciler · settler · funding collector ·     │
-│  liquidator · equity snapshotter                                    │
-└──────────────────────────────────────────────────────────────────────┘
+Agent / API client ──────────────────────┐
+                                        v
+Human ──> Web (:5173 or static) ──> Hono API (:3100) ──> SQLite
+                                        │
+                                        ├──> Polymarket public APIs
+                                        └──> Hyperliquid public APIs
+
+Model ──> Renderer (:3101) ──> Web analysis route ──> API
+
+API process
+  ├── routes, auth, validation, idempotency, SSE
+  ├── order and portfolio services
+  ├── deterministic core and analysis contracts
+  ├── market registry and adapters
+  └── reconciler, settler, funding, liquidator, equity snapshotter
 ```
+
+The API and five periodic workers run in one Node.js process. In development,
+Vite is a second process and the optional Playwright renderer is a third. In a
+production-style single-service deployment, the API may serve a prebuilt web
+bundle with `SERVE_WEB_DIST=true`; the renderer remains separate.
+
+The renderer opens the configured web deployment and therefore depends on both
+the web route and API contract at runtime, even though it has no workspace
+package dependency on either.
+
+## Package Dependency Direction
+
+Arrows below mean “may import from.”
+
+```text
+core        analysis
+  ^            ^
+  │            │
+markets        │
+  ^ \          │
+  │  \         │
+  └── api ─────┘
+
+web ──> core, analysis
+renderer ──> Playwright + deployed web/API over HTTP
+```
+
+| Package | Workspace dependencies | Boundary |
+|---|---|---|
+| `core` | none | pure trading and shared contracts |
+| `analysis` | none | pure chart document and indicator contracts |
+| `markets` | `core` | public market data and normalization |
+| `api` | `core`, `analysis`, `markets` | side-effect composition and persistence |
+| `web` | `core`, `analysis` | browser presentation and projections |
+| `renderer` | none | external browser verification service |
+
+`core` and `analysis` must not import API, database, browser, or market adapter
+behavior. Market-specific upstream shapes must not leak past `markets`.
+
+## Runtime Entrypoints
+
+- `packages/api/src/index.ts`: loads configuration, migrates SQLite, assembles
+  the app, listens, and starts workers.
+- `packages/api/src/app.ts`: registers adapters and mounts public, authenticated,
+  dashboard, analysis, and admin routes.
+- `packages/web/src/main.tsx`: browser entry; `packages/web/src/App.tsx`: routes.
+- `packages/renderer/src/index.ts`: renderer health, inspect, and image endpoints.
+- `skills/unimarket/scripts/unimarket-agent.sh`: deterministic agent-facing API helper.
+- `scripts/smoke-api.sh`: live local end-to-end API verification.
+
+See [Source Map](source-map.md) for file-level ownership and
+[Configuration](configuration.md) for service modes.
 
 ## Design Goals
 
@@ -82,10 +114,12 @@ unimarket/
 │   │       └── index.ts       # API bootstrap
 │   └── web/
 │       └── src/
-│           ├── pages/         # Admin pages
+│           ├── pages/         # Dashboard and analysis pages
 │           ├── components/    # Shared UI + activity feed
 │           └── lib/           # API hooks and formatting helpers
 ├── docs/
+│   ├── adr/                   # Historical architecture decisions
+│   └── INDEX.md               # Documentation navigation and ownership
 ├── skills/
 └── README.md
 ```
@@ -355,7 +389,8 @@ If you add a new market, the preferred path is:
 2. implement the required adapter methods and only the optional methods the market supports
 3. add adapter tests with mocked upstream responses
 4. register it in the API bootstrap path
-5. document any special symbol semantics or constraints
+5. update the API reference and portable skill market/API projections
+6. document any special symbol semantics or constraints
 
 If you add a new domain feature, the preferred path is:
 
@@ -363,3 +398,7 @@ If you add a new domain feature, the preferred path is:
 2. keep database and HTTP concerns in `packages/api`
 3. update timeline/events when the feature affects observable state
 4. update docs and tests in the same change
+
+For a costly-to-reverse cross-package choice, add or supersede an
+[Architecture Decision Record](adr/README.md). Active contracts belong in this
+document and the relevant topic guide; ADRs preserve why the choice was made.
